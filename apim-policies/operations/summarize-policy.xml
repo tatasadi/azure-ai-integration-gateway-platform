@@ -1,0 +1,134 @@
+<policies>
+    <inbound>
+        <base />
+
+        <!-- Validate request body -->
+        <validate-content unspecified-content-type-action="prevent" max-size="1048576" size-exceeded-action="detect" errors-variable-name="validationErrors">
+            <content type="application/json" validate-as="json" action="detect" />
+        </validate-content>
+
+        <!-- Parse request body -->
+        <set-variable name="requestBody" value="@(context.Request.Body.As<JObject>(preserveContent: true))" />
+        <set-variable name="inputText" value="@(((JObject)context.Variables["requestBody"])["text"]?.ToString())" />
+        <set-variable name="maxLength" value="@(((JObject)context.Variables["requestBody"])["max_length"]?.ToString() ?? "500")" />
+        <set-variable name="style" value="@(((JObject)context.Variables["requestBody"])["style"]?.ToString() ?? "concise")" />
+
+        <!-- Build system prompt based on style -->
+        <set-variable name="systemPrompt" value="@{
+            var style = (string)context.Variables["style"];
+            switch(style) {
+                case "detailed":
+                    return "You are a detailed summarization assistant. Provide comprehensive summaries that retain key details.";
+                case "bullet_points":
+                    return "You are a summarization assistant. Provide summaries in bullet point format.";
+                default:
+                    return "You are a concise summarization assistant. Provide brief, clear summaries.";
+            }
+        }" />
+
+        <!-- Transform request to OpenAI Chat Completion format -->
+        <set-body>@{
+            var requestBody = (JObject)context.Variables["requestBody"];
+            var inputText = (string)context.Variables["inputText"];
+            var maxLength = int.Parse((string)context.Variables["maxLength"]);
+            var systemPrompt = (string)context.Variables["systemPrompt"];
+
+            return new JObject(
+                new JProperty("messages", new JArray(
+                    new JObject(
+                        new JProperty("role", "system"),
+                        new JProperty("content", systemPrompt)
+                    ),
+                    new JObject(
+                        new JProperty("role", "user"),
+                        new JProperty("content", inputText)
+                    )
+                )),
+                new JProperty("max_tokens", maxLength),
+                new JProperty("temperature", 0.3)
+            ).ToString();
+        }</set-body>
+
+        <!-- Set backend URL to Azure OpenAI endpoint -->
+        <set-backend-service base-url="{{ai-foundry-endpoint}}" />
+        <rewrite-uri template="/openai/deployments/gpt-5-mini/chat/completions?api-version=2024-02-01" />
+
+        <!-- Authenticate using Managed Identity -->
+        <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+
+        <!-- Log request to Application Insights -->
+        <log-to-applicationinsights logger-id="appinsights-logger">@{
+            return new JObject(
+                new JProperty("EventName", "SummarizeRequest"),
+                new JProperty("SubscriptionId", context.Subscription.Id),
+                new JProperty("RequestId", context.Variables["requestId"]),
+                new JProperty("ClientIP", context.Request.IpAddress),
+                new JProperty("Timestamp", DateTime.UtcNow),
+                new JProperty("InputLength", ((string)context.Variables["inputText"]).Length),
+                new JProperty("MaxLength", context.Variables["maxLength"]),
+                new JProperty("Style", context.Variables["style"])
+            ).ToString();
+        }</log-to-applicationinsights>
+    </inbound>
+
+    <backend>
+        <base />
+    </backend>
+
+    <outbound>
+        <base />
+
+        <!-- Parse AI response -->
+        <set-variable name="aiResponse" value="@(context.Response.Body.As<JObject>(preserveContent: true))" />
+        <set-variable name="tokensUsed" value="@(((JObject)context.Variables["aiResponse"])["usage"]?["total_tokens"]?.ToString() ?? "0")" />
+
+        <!-- Transform response to simplified format -->
+        <set-body>@{
+            var aiResponse = (JObject)context.Variables["aiResponse"];
+            var summary = aiResponse["choices"]?[0]?["message"]?["content"]?.ToString() ?? "";
+            var tokensUsed = int.Parse((string)context.Variables["tokensUsed"]);
+            var requestId = (string)context.Variables["requestId"];
+
+            return new JObject(
+                new JProperty("summary", summary),
+                new JProperty("tokens_used", tokensUsed),
+                new JProperty("request_id", requestId),
+                new JProperty("model", "gpt-5-mini")
+            ).ToString();
+        }</set-body>
+
+        <!-- Add token usage header -->
+        <set-header name="X-Token-Usage" exists-action="override">
+            <value>@((string)context.Variables["tokensUsed"])</value>
+        </set-header>
+
+        <!-- Log response to Application Insights -->
+        <log-to-applicationinsights logger-id="appinsights-logger">@{
+            return new JObject(
+                new JProperty("EventName", "SummarizeResponse"),
+                new JProperty("SubscriptionId", context.Subscription.Id),
+                new JProperty("RequestId", context.Variables["requestId"]),
+                new JProperty("Timestamp", DateTime.UtcNow),
+                new JProperty("TokensUsed", context.Variables["tokensUsed"]),
+                new JProperty("StatusCode", context.Response.StatusCode)
+            ).ToString();
+        }</log-to-applicationinsights>
+    </outbound>
+
+    <on-error>
+        <base />
+
+        <!-- Log error to Application Insights -->
+        <log-to-applicationinsights logger-id="appinsights-logger">@{
+            return new JObject(
+                new JProperty("EventName", "SummarizeError"),
+                new JProperty("SubscriptionId", context.Subscription.Id),
+                new JProperty("RequestId", context.Variables.GetValueOrDefault<string>("requestId", "N/A")),
+                new JProperty("Timestamp", DateTime.UtcNow),
+                new JProperty("ErrorSource", context.LastError.Source),
+                new JProperty("ErrorMessage", context.LastError.Message),
+                new JProperty("StatusCode", context.Response.StatusCode)
+            ).ToString();
+        }</log-to-applicationinsights>
+    </on-error>
+</policies>

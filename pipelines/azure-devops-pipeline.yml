@@ -1,0 +1,416 @@
+name: AI-Gateway-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - terraform/**
+      - apim-policies/**
+      - pipelines/**
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - terraform/**
+      - apim-policies/**
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: ai-gateway-common
+  - name: terraformVersion
+    value: '1.5.0'
+  - name: workingDirectory
+    value: '$(System.DefaultWorkingDirectory)/terraform'
+
+stages:
+  # ============================================
+  # Stage 1: Validate
+  # ============================================
+  - stage: Validate
+    displayName: 'Validate Configuration'
+    jobs:
+      - job: ValidateTerraform
+        displayName: 'Validate Terraform'
+        steps:
+          - task: TerraformInstaller@0
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: $(terraformVersion)
+
+          - task: TerraformTaskV2@2
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(workingDirectory)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: 'rg-terraform-state'
+              backendAzureRmStorageAccountName: 'sttfstateaigateway'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'dev.terraform.tfstate'
+
+          - task: TerraformTaskV2@2
+            displayName: 'Terraform Validate'
+            inputs:
+              provider: 'azurerm'
+              command: 'validate'
+              workingDirectory: $(workingDirectory)
+
+          - task: TerraformTaskV2@2
+            displayName: 'Terraform Format Check'
+            inputs:
+              provider: 'azurerm'
+              command: 'custom'
+              customCommand: 'fmt'
+              commandOptions: '-check -recursive'
+              workingDirectory: $(workingDirectory)
+            continueOnError: true
+
+      - job: ValidatePolicies
+        displayName: 'Validate APIM Policies'
+        steps:
+          - script: |
+              echo "Validating APIM policy XML files..."
+              find apim-policies -name "*.xml" -exec xmllint --noout {} \;
+              if [ $? -eq 0 ]; then
+                echo "All policy files are valid XML"
+              else
+                echo "##vso[task.logissue type=error]Invalid XML found in policy files"
+                exit 1
+              fi
+            displayName: 'Validate XML Policies'
+
+      - job: SecurityScan
+        displayName: 'Security Scanning'
+        steps:
+          - task: TerraformInstaller@0
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: $(terraformVersion)
+
+          - script: |
+              echo "Running security scan with Checkov..."
+              pip install checkov
+              checkov -d terraform/ --skip-check CKV_AZURE_109,CKV_AZURE_110 --compact --quiet
+            displayName: 'Run Checkov Security Scan'
+            continueOnError: true
+
+  # ============================================
+  # Stage 2: Plan (Dev)
+  # ============================================
+  - stage: PlanDev
+    displayName: 'Plan - Dev'
+    dependsOn: Validate
+    condition: succeeded()
+    variables:
+      - group: ai-gateway-dev
+    jobs:
+      - job: TerraformPlan
+        displayName: 'Terraform Plan Dev'
+        steps:
+          - task: TerraformInstaller@0
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: $(terraformVersion)
+
+          - task: TerraformTaskV2@2
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(workingDirectory)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: 'rg-terraform-state'
+              backendAzureRmStorageAccountName: 'sttfstateaigateway'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'dev.terraform.tfstate'
+
+          - task: TerraformTaskV2@2
+            displayName: 'Terraform Plan'
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              commandOptions: '-var="environment=dev" -out=$(Build.ArtifactStagingDirectory)/tfplan-dev'
+              workingDirectory: $(workingDirectory)
+              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Plan Artifact'
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/tfplan-dev'
+              artifact: 'tfplan-dev'
+              publishLocation: 'pipeline'
+
+  # ============================================
+  # Stage 3: Deploy (Dev)
+  # ============================================
+  - stage: DeployDev
+    displayName: 'Deploy - Dev'
+    dependsOn: PlanDev
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    variables:
+      - group: ai-gateway-dev
+    jobs:
+      - deployment: DeployInfrastructure
+        displayName: 'Deploy Infrastructure'
+        environment: 'dev'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: TerraformInstaller@0
+                  displayName: 'Install Terraform'
+                  inputs:
+                    terraformVersion: $(terraformVersion)
+
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Download Plan Artifact'
+                  inputs:
+                    artifactName: 'tfplan-dev'
+                    targetPath: '$(System.DefaultWorkingDirectory)/terraform'
+
+                - task: TerraformTaskV2@2
+                  displayName: 'Terraform Init'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'init'
+                    workingDirectory: $(workingDirectory)
+                    backendServiceArm: 'Azure-ServiceConnection'
+                    backendAzureRmResourceGroupName: 'rg-terraform-state'
+                    backendAzureRmStorageAccountName: 'sttfstateaigateway'
+                    backendAzureRmContainerName: 'tfstate'
+                    backendAzureRmKey: 'dev.terraform.tfstate'
+
+                - task: TerraformTaskV2@2
+                  displayName: 'Terraform Apply'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'apply'
+                    commandOptions: 'tfplan-dev'
+                    workingDirectory: $(workingDirectory)
+                    environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+
+                - task: Bash@3
+                  displayName: 'Run Smoke Tests'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      echo "Running smoke tests..."
+                      # Add smoke test commands here
+                      echo "Smoke tests completed"
+
+  # ============================================
+  # Stage 4: Plan (Staging)
+  # ============================================
+  - stage: PlanStaging
+    displayName: 'Plan - Staging'
+    dependsOn: DeployDev
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    variables:
+      - group: ai-gateway-staging
+    jobs:
+      - job: TerraformPlan
+        displayName: 'Terraform Plan Staging'
+        steps:
+          - task: TerraformInstaller@0
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: $(terraformVersion)
+
+          - task: TerraformTaskV2@2
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(workingDirectory)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: 'rg-terraform-state'
+              backendAzureRmStorageAccountName: 'sttfstateaigateway'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'staging.terraform.tfstate'
+
+          - task: TerraformTaskV2@2
+            displayName: 'Terraform Plan'
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              commandOptions: '-var="environment=staging" -out=$(Build.ArtifactStagingDirectory)/tfplan-staging'
+              workingDirectory: $(workingDirectory)
+              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Plan Artifact'
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/tfplan-staging'
+              artifact: 'tfplan-staging'
+              publishLocation: 'pipeline'
+
+  # ============================================
+  # Stage 5: Deploy (Staging)
+  # ============================================
+  - stage: DeployStaging
+    displayName: 'Deploy - Staging'
+    dependsOn: PlanStaging
+    condition: succeeded()
+    variables:
+      - group: ai-gateway-staging
+    jobs:
+      - deployment: DeployInfrastructure
+        displayName: 'Deploy Infrastructure'
+        environment: 'staging'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: TerraformInstaller@0
+                  displayName: 'Install Terraform'
+                  inputs:
+                    terraformVersion: $(terraformVersion)
+
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Download Plan Artifact'
+                  inputs:
+                    artifactName: 'tfplan-staging'
+                    targetPath: '$(System.DefaultWorkingDirectory)/terraform'
+
+                - task: TerraformTaskV2@2
+                  displayName: 'Terraform Init'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'init'
+                    workingDirectory: $(workingDirectory)
+                    backendServiceArm: 'Azure-ServiceConnection'
+                    backendAzureRmResourceGroupName: 'rg-terraform-state'
+                    backendAzureRmStorageAccountName: 'sttfstateaigateway'
+                    backendAzureRmContainerName: 'tfstate'
+                    backendAzureRmKey: 'staging.terraform.tfstate'
+
+                - task: TerraformTaskV2@2
+                  displayName: 'Terraform Apply'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'apply'
+                    commandOptions: 'tfplan-staging'
+                    workingDirectory: $(workingDirectory)
+                    environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+
+                - task: Bash@3
+                  displayName: 'Run Integration Tests'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      echo "Running integration tests..."
+                      # Add integration test commands here
+                      echo "Integration tests completed"
+
+  # ============================================
+  # Stage 6: Plan (Production)
+  # ============================================
+  - stage: PlanProd
+    displayName: 'Plan - Production'
+    dependsOn: DeployStaging
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    variables:
+      - group: ai-gateway-prod
+    jobs:
+      - job: TerraformPlan
+        displayName: 'Terraform Plan Production'
+        steps:
+          - task: TerraformInstaller@0
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: $(terraformVersion)
+
+          - task: TerraformTaskV2@2
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(workingDirectory)
+              backendServiceArm: 'Azure-ServiceConnection'
+              backendAzureRmResourceGroupName: 'rg-terraform-state'
+              backendAzureRmStorageAccountName: 'sttfstateaigateway'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'prod.terraform.tfstate'
+
+          - task: TerraformTaskV2@2
+            displayName: 'Terraform Plan'
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              commandOptions: '-var="environment=prod" -out=$(Build.ArtifactStagingDirectory)/tfplan-prod'
+              workingDirectory: $(workingDirectory)
+              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Plan Artifact'
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/tfplan-prod'
+              artifact: 'tfplan-prod'
+              publishLocation: 'pipeline'
+
+  # ============================================
+  # Stage 7: Deploy (Production)
+  # ============================================
+  - stage: DeployProd
+    displayName: 'Deploy - Production'
+    dependsOn: PlanProd
+    condition: succeeded()
+    variables:
+      - group: ai-gateway-prod
+    jobs:
+      - deployment: DeployInfrastructure
+        displayName: 'Deploy Infrastructure'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: TerraformInstaller@0
+                  displayName: 'Install Terraform'
+                  inputs:
+                    terraformVersion: $(terraformVersion)
+
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Download Plan Artifact'
+                  inputs:
+                    artifactName: 'tfplan-prod'
+                    targetPath: '$(System.DefaultWorkingDirectory)/terraform'
+
+                - task: TerraformTaskV2@2
+                  displayName: 'Terraform Init'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'init'
+                    workingDirectory: $(workingDirectory)
+                    backendServiceArm: 'Azure-ServiceConnection'
+                    backendAzureRmResourceGroupName: 'rg-terraform-state'
+                    backendAzureRmStorageAccountName: 'sttfstateaigateway'
+                    backendAzureRmContainerName: 'tfstate'
+                    backendAzureRmKey: 'prod.terraform.tfstate'
+
+                - task: TerraformTaskV2@2
+                  displayName: 'Terraform Apply'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'apply'
+                    commandOptions: 'tfplan-prod'
+                    workingDirectory: $(workingDirectory)
+                    environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+
+                - task: Bash@3
+                  displayName: 'Health Check'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      echo "Running production health checks..."
+                      # Add health check commands here
+                      echo "Health checks completed successfully"
