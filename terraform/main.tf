@@ -15,6 +15,14 @@ terraform {
       version = "~> 3.0"
     }
   }
+
+  # Backend configuration for Azure Storage
+  backend "azurerm" {
+    resource_group_name  = "rg-terraform"
+    storage_account_name = "sttfstateta"
+    container_name       = "tfstate"
+    key                  = "azure-ai-integration.tfstate"
+  }
 }
 
 provider "azurerm" {
@@ -92,8 +100,8 @@ module "ai_foundry" {
   tags               = local.common_tags
 
   # AI model configurations
-  enable_gpt5_mini = var.enable_gpt5_mini
-  enable_gpt5_nano = var.enable_gpt5_nano
+  enable_gpt4o = var.enable_gpt4o
+  enable_gpt35_turbo = var.enable_gpt35_turbo
 }
 
 # API Management Module

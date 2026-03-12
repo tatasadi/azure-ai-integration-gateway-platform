@@ -19,12 +19,12 @@ output "primary_key" {
   sensitive   = true
 }
 
-output "gpt5_mini_deployment_name" {
-  description = "Name of the GPT-5-mini deployment"
-  value       = var.enable_gpt5_mini ? azurerm_cognitive_deployment.gpt5_mini[0].name : null
+output "gpt4o_deployment_name" {
+  description = "Name of the GPT-4o deployment"
+  value       = var.enable_gpt4o ? azurerm_cognitive_deployment.gpt4o[0].name : null
 }
 
-output "gpt5_nano_deployment_name" {
-  description = "Name of the GPT-5-nano deployment"
-  value       = var.enable_gpt5_nano ? azurerm_cognitive_deployment.gpt5_nano[0].name : null
+output "gpt35_turbo_deployment_name" {
+  description = "Name of the GPT-35-Turbo deployment"
+  value       = var.enable_gpt35_turbo ? azurerm_cognitive_deployment.gpt35_turbo[0].name : null
 }

@@ -43,14 +43,14 @@ variable "apim_sku_name" {
 }
 
 # AI Foundry Model Configuration
-variable "enable_gpt5_mini" {
-  description = "Enable GPT-5-mini model deployment"
+variable "enable_gpt4o" {
+  description = "Enable GPT-4o model deployment"
   type        = bool
   default     = true
 }
 
-variable "enable_gpt5_nano" {
-  description = "Enable GPT-5-nano model deployment"
+variable "enable_gpt35_turbo" {
+  description = "Enable GPT-35-Turbo model deployment"
   type        = bool
   default     = false
 }

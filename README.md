@@ -191,8 +191,7 @@ azure-ai-integration-gateway-platform/
 │   └── smoke/                      # Smoke tests
 │       └── smoke_test.sh           # Basic smoke tests
 ├── .gitignore                      # Git ignore rules
-├── README.md                       # This file
-└── plan.md                         # Implementation plan
+└── README.md                       # This file
 ```
 
 ## Deployment Environments

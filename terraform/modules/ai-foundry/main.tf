@@ -14,39 +14,39 @@ resource "azurerm_cognitive_account" "openai" {
   tags = var.tags
 }
 
-# GPT-5-mini deployment
-resource "azurerm_cognitive_deployment" "gpt5_mini" {
-  count                = var.enable_gpt5_mini ? 1 : 0
-  name                 = "gpt-5-mini"
+# GPT-4o deployment
+resource "azurerm_cognitive_deployment" "gpt4o" {
+  count                = var.enable_gpt4o ? 1 : 0
+  name                 = "gpt-4o"
   cognitive_account_id = azurerm_cognitive_account.openai.id
 
   model {
     format  = "OpenAI"
-    name    = "gpt-5-mini"
-    version = "2025-08-01"
+    name    = "gpt-4o"
+    version = "2024-05-13"
   }
 
-  sku {
-    name     = "Standard"
-    capacity = var.gpt5_mini_capacity
+  scale {
+    type     = "Standard"
+    capacity = var.gpt4o_capacity
   }
 }
 
-# GPT-5-nano deployment
-resource "azurerm_cognitive_deployment" "gpt5_nano" {
-  count                = var.enable_gpt5_nano ? 1 : 0
-  name                 = "gpt-5-nano"
+# GPT-35-Turbo deployment
+resource "azurerm_cognitive_deployment" "gpt35_turbo" {
+  count                = var.enable_gpt35_turbo ? 1 : 0
+  name                 = "gpt-35-turbo"
   cognitive_account_id = azurerm_cognitive_account.openai.id
 
   model {
     format  = "OpenAI"
-    name    = "gpt-5-nano"
-    version = "2025-08-01"
+    name    = "gpt-35-turbo"
+    version = "0613"
   }
 
-  sku {
-    name     = "Standard"
-    capacity = var.gpt5_nano_capacity
+  scale {
+    type     = "Standard"
+    capacity = var.gpt35_turbo_capacity
   }
 }
 

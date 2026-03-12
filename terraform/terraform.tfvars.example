@@ -12,8 +12,8 @@ apim_publisher_email = "ai-gateway-admin@example.com"
 apim_sku_name        = "Developer_1"  # Options: Developer_1, Standard_1, Premium_1
 
 # AI Model Configuration
-enable_gpt5_mini = true
-enable_gpt5_nano = false
+enable_gpt4o = true
+enable_gpt35_turbo = false
 
 # Resource Tags
 tags = {
