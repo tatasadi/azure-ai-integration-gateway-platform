@@ -2,13 +2,10 @@
     <inbound>
         <!-- Validate subscription key -->
         <check-header name="Ocp-Apim-Subscription-Key" failed-check-httpcode="401" failed-check-error-message="Missing or invalid subscription key" />
-
         <!-- Rate limiting per subscription (100 requests per minute) -->
         <rate-limit-by-key calls="100" renewal-period="60" counter-key="@(context.Subscription.Id)" />
-
         <!-- Daily quota per subscription (10,000 requests per day) -->
         <quota-by-key calls="10000" renewal-period="86400" counter-key="@(context.Subscription.Id)" />
-
         <!-- CORS configuration for browser clients -->
         <cors allow-credentials="false">
             <allowed-origins>
@@ -30,10 +27,8 @@
                 <header>X-Token-Usage</header>
             </expose-headers>
         </cors>
-
         <!-- Generate request ID -->
         <set-variable name="requestId" value="@(Guid.NewGuid().ToString())" />
-
         <!-- Set custom headers -->
         <set-header name="X-Request-Id" exists-action="override">
             <value>@((string)context.Variables["requestId"])</value>
@@ -44,12 +39,10 @@
     </backend>
     <outbound>
         <base />
-
         <!-- Add request ID to response -->
         <set-header name="X-Request-Id" exists-action="override">
             <value>@((string)context.Variables["requestId"])</value>
         </set-header>
-
         <!-- Add rate limit headers -->
         <set-header name="X-RateLimit-Remaining" exists-action="override">
             <value>@(context.Response.Headers.GetValueOrDefault("Rate-Limit-Remaining","N/A"))</value>
@@ -57,19 +50,17 @@
     </outbound>
     <on-error>
         <base />
-
         <!-- Custom error response -->
         <set-body>@{
-            var error = context.LastError;
-            return new JObject(
-                new JProperty("error", new JObject(
-                    new JProperty("code", error.Source),
-                    new JProperty("message", error.Message),
-                    new JProperty("request_id", context.Variables.GetValueOrDefault&lt;string&gt;("requestId", "N/A"))
-                ))
-            ).ToString();
-        }</set-body>
-
+                var error = context.LastError;
+                return new JObject(
+                    new JProperty("error", new JObject(
+                        new JProperty("code", error.Source),
+                        new JProperty("message", error.Message),
+                        new JProperty("request_id", context.Variables.GetValueOrDefault&lt;string&gt;("requestId", "N/A"))
+                    ))
+                ).ToString();
+            }</set-body>
         <set-header name="Content-Type" exists-action="override">
             <value>application/json</value>
         </set-header>

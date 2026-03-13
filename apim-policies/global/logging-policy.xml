@@ -1,0 +1,61 @@
+<policies>
+    <inbound>
+        <!-- Generate request timestamp -->
+        <set-variable name="requestStartTime" value="@(DateTime.UtcNow)" />
+        <!-- Log request to Application Insights -->
+        <trace source="AI-Gateway" severity="information">@{
+                return JsonConvert.SerializeObject(new {
+                    EventName = "AIGatewayRequest",
+                    RequestId = context.RequestId,
+                    SubscriptionId = context.Subscription?.Id ?? "anonymous",
+                    SubscriptionName = context.Subscription?.Name ?? "anonymous",
+                    Operation = context.Operation.Name,
+                    ApiId = context.Api.Id,
+                    ApiName = context.Api.Name,
+                    Method = context.Request.Method,
+                    Url = context.Request.Url.ToString(),
+                    ClientIP = context.Request.IpAddress,
+                    Timestamp = DateTime.UtcNow
+                });
+            }</trace>
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <!-- Calculate request duration -->
+        <set-variable name="requestDuration" value="@((DateTime.UtcNow - ((DateTime)context.Variables[&quot;requestStartTime&quot;])).TotalMilliseconds)" />
+        <!-- Log response to Application Insights -->
+        <trace source="AI-Gateway" severity="information">@{
+                var statusCode = context.Response.StatusCode;
+                return JsonConvert.SerializeObject(new {
+                    EventName = "AIGatewayResponse",
+                    RequestId = context.RequestId,
+                    SubscriptionId = context.Subscription?.Id ?? "anonymous",
+                    Operation = context.Operation.Name,
+                    ResponseCode = statusCode,
+                    Duration = context.Variables["requestDuration"],
+                    ResponseSize = context.Response.Body?.As&lt;string&gt;()?.Length ?? 0,
+                    Timestamp = DateTime.UtcNow,
+                    Success = (statusCode >= 200 &amp;&amp; statusCode &lt; 300)
+                });
+            }</trace>
+    </outbound>
+    <on-error>
+        <!-- Log errors to Application Insights -->
+        <trace source="AI-Gateway" severity="error">@{
+                var error = context.LastError;
+                return JsonConvert.SerializeObject(new {
+                    EventName = "AIGatewayError",
+                    RequestId = context.RequestId,
+                    SubscriptionId = context.Subscription?.Id ?? "anonymous",
+                    Operation = context.Operation.Name,
+                    ErrorSource = error?.Source,
+                    ErrorReason = error?.Reason,
+                    ErrorMessage = error?.Message,
+                    ResponseCode = context.Response?.StatusCode ?? 500,
+                    Timestamp = DateTime.UtcNow
+                });
+            }</trace>
+    </on-error>
+</policies>

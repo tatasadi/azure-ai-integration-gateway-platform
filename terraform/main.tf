@@ -123,6 +123,22 @@ module "api_management" {
   tags               = local.common_tags
 }
 
+# Monitoring Alerts and Dashboards Module (requires APIM to exist)
+module "monitoring_alerts" {
+  source = "./modules/monitoring-alerts"
+
+  project_name          = var.project_name
+  environment           = var.environment
+  location              = var.location
+  resource_group_name   = module.resource_group.name
+  apim_id               = module.api_management.id
+  application_insights_id = module.monitoring.application_insights_id
+  action_group_id       = module.monitoring.action_group_id
+  tags                  = local.common_tags
+
+  depends_on = [module.api_management, module.monitoring]
+}
+
 # Local variables
 locals {
   common_tags = merge(

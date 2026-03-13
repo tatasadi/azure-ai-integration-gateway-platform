@@ -2,6 +2,20 @@
     <inbound>
         <base />
 
+        <!-- Log health check request -->
+        <trace source="AI-Gateway-Health" severity="information">
+            @{
+                return JsonConvert.SerializeObject(new {
+                    EventName = "HealthCheckRequest",
+                    RequestId = context.RequestId,
+                    SubscriptionId = context.Subscription?.Id ?? "anonymous",
+                    Operation = "health",
+                    ClientIP = context.Request.IpAddress,
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+        </trace>
+
         <!-- Mock health check response (no backend call needed) -->
         <return-response>
             <set-status code="200" reason="OK" />
@@ -33,5 +47,20 @@
 
     <on-error>
         <base />
+
+        <!-- Log health check error -->
+        <trace source="AI-Gateway-Health" severity="error">
+            @{
+                var error = context.LastError;
+                return JsonConvert.SerializeObject(new {
+                    EventName = "HealthCheckError",
+                    RequestId = context.RequestId,
+                    ErrorSource = error?.Source,
+                    ErrorReason = error?.Reason,
+                    ErrorMessage = error?.Message,
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+        </trace>
     </on-error>
 </policies>
