@@ -23,7 +23,7 @@ Azure API Management (Gateway)
        │
        │ Managed Identity
        ▼
-Azure AI Foundry (GPT-5-mini/nano)
+Azure AI Foundry (GPT-4o)
        │
        └──> Application Insights (Logging)
 ```
@@ -95,8 +95,8 @@ project_name         = "aigateway"
 environment          = "dev"
 location             = "eastus"
 apim_publisher_email = "your-email@example.com"
-enable_gpt5_mini     = true
-enable_gpt5_nano     = false
+enable_gpt4o         = true
+enable_gpt35_turbo   = false
 ```
 
 ### 3. Login to Azure
@@ -236,8 +236,8 @@ Key variables in `terraform.tfvars`:
 | `location` | Azure region | `eastus` |
 | `apim_publisher_email` | APIM publisher email | - |
 | `apim_sku_name` | APIM SKU | `Developer_1` |
-| `enable_gpt5_mini` | Enable GPT-5-mini | `true` |
-| `enable_gpt5_nano` | Enable GPT-5-nano | `false` |
+| `enable_gpt4o` | Enable GPT-4o model | `true` |
+| `enable_gpt35_turbo` | Enable GPT-35-Turbo model | `false` |
 
 ## Testing
 

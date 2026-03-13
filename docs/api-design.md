@@ -124,7 +124,7 @@ Content-Type: application/json
   "summary": "This is the summarized text...",
   "tokens_used": 1234,
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "model": "gpt-5-mini"
+  "model": "gpt-4o"
 }
 ```
 
@@ -262,7 +262,7 @@ Content-Type: application/json
   "confidence": 0.95,
   "tokens_used": 890,
   "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "model": "gpt-5-mini"
+  "model": "gpt-4o"
 }
 ```
 
@@ -419,7 +419,7 @@ curl -X POST https://apim-aigateway-dev-eastus-01.azure-api.net/ai/summarize \
   "summary": "Global economy recovers in 2026, driven by AI innovation in key sectors. Inflation stabilizes as central banks maintain cautious policies.",
   "tokens_used": 156,
   "request_id": "a1b2c3d4-e5f6-4789-0123-456789abcdef",
-  "model": "gpt-5-mini"
+  "model": "gpt-4o"
 }
 ```
 
@@ -458,7 +458,7 @@ curl -X POST https://apim-aigateway-dev-eastus-01.azure-api.net/ai/extract \
   "confidence": 0.98,
   "tokens_used": 234,
   "request_id": "b2c3d4e5-f6a7-4890-1234-567890bcdefg",
-  "model": "gpt-5-mini"
+  "model": "gpt-4o"
 }
 ```
 

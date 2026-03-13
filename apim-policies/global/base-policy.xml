@@ -65,7 +65,7 @@
                 new JProperty("error", new JObject(
                     new JProperty("code", error.Source),
                     new JProperty("message", error.Message),
-                    new JProperty("request_id", context.Variables.GetValueOrDefault<string>("requestId", "N/A"))
+                    new JProperty("request_id", context.Variables.GetValueOrDefault&lt;string&gt;("requestId", "N/A"))
                 ))
             ).ToString();
         }</set-body>

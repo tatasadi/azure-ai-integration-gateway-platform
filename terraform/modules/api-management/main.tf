@@ -36,6 +36,15 @@ resource "azurerm_api_management_named_value" "ai_endpoint" {
   value               = var.ai_foundry_endpoint
 }
 
+# Backend for Azure OpenAI
+resource "azurerm_api_management_backend" "azure_openai" {
+  name                = "azure-openai-backend"
+  resource_group_name = var.resource_group_name
+  api_management_name = azurerm_api_management.main.name
+  protocol            = "http"
+  url                 = var.ai_foundry_endpoint
+}
+
 # Diagnostic Settings for APIM
 resource "azurerm_monitor_diagnostic_setting" "apim_diagnostics" {
   name                       = "apim-diagnostics"

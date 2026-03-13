@@ -51,7 +51,7 @@ resource "azurerm_api_management_api_operation" "summarize" {
           summary     = "This is the summarized text..."
           tokens_used = 1234
           request_id  = "550e8400-e29b-41d4-a716-446655440000"
-          model       = "gpt-5-mini"
+          model       = "gpt-4o"
         })
       }
     }
@@ -106,7 +106,7 @@ resource "azurerm_api_management_api_operation" "extract" {
           confidence  = 0.95
           tokens_used = 890
           request_id  = "550e8400-e29b-41d4-a716-446655440000"
-          model       = "gpt-5-mini"
+          model       = "gpt-4o"
         })
       }
     }
@@ -180,4 +180,59 @@ resource "azurerm_api_management_api_diagnostic" "ai_gateway" {
     body_bytes     = 8192
     headers_to_log = ["Content-Type"]
   }
+}
+
+# API-level Policy (Global/Base Policy)
+resource "azurerm_api_management_api_policy" "ai_gateway" {
+  api_name            = azurerm_api_management_api.ai_gateway.name
+  api_management_name = azurerm_api_management.main.name
+  resource_group_name = var.resource_group_name
+
+  xml_content = file("${path.module}/../../../apim-policies/global/base-policy.xml")
+}
+
+# Operation Policy: Summarize
+resource "azurerm_api_management_api_operation_policy" "summarize" {
+  api_name            = azurerm_api_management_api.ai_gateway.name
+  api_management_name = azurerm_api_management.main.name
+  resource_group_name = var.resource_group_name
+  operation_id        = azurerm_api_management_api_operation.summarize.operation_id
+
+  xml_content = file("${path.module}/../../../apim-policies/operations/summarize-policy.xml")
+
+  depends_on = [
+    azurerm_api_management_logger.appinsights,
+    azurerm_api_management_backend.azure_openai,
+    azurerm_api_management_api_policy.ai_gateway
+  ]
+}
+
+# Operation Policy: Extract
+resource "azurerm_api_management_api_operation_policy" "extract" {
+  api_name            = azurerm_api_management_api.ai_gateway.name
+  api_management_name = azurerm_api_management.main.name
+  resource_group_name = var.resource_group_name
+  operation_id        = azurerm_api_management_api_operation.extract.operation_id
+
+  xml_content = file("${path.module}/../../../apim-policies/operations/extract-policy.xml")
+
+  depends_on = [
+    azurerm_api_management_logger.appinsights,
+    azurerm_api_management_backend.azure_openai,
+    azurerm_api_management_api_policy.ai_gateway
+  ]
+}
+
+# Operation Policy: Health Check
+resource "azurerm_api_management_api_operation_policy" "health" {
+  api_name            = azurerm_api_management_api.ai_gateway.name
+  api_management_name = azurerm_api_management.main.name
+  resource_group_name = var.resource_group_name
+  operation_id        = azurerm_api_management_api_operation.health.operation_id
+
+  xml_content = file("${path.module}/../../../apim-policies/operations/health-policy.xml")
+
+  depends_on = [
+    azurerm_api_management_api_policy.ai_gateway
+  ]
 }

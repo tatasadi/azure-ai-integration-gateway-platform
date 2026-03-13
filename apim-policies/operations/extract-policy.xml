@@ -1,140 +1,17 @@
 <policies>
     <inbound>
         <base />
-
-        <!-- Validate request body -->
-        <validate-content unspecified-content-type-action="prevent" max-size="1048576" size-exceeded-action="detect" errors-variable-name="validationErrors">
-            <content type="application/json" validate-as="json" action="detect" />
-        </validate-content>
-
-        <!-- Parse request body -->
-        <set-variable name="requestBody" value="@(context.Request.Body.As<JObject>(preserveContent: true))" />
-        <set-variable name="inputText" value="@(((JObject)context.Variables["requestBody"])["text"]?.ToString())" />
-        <set-variable name="schema" value="@(((JObject)context.Variables["requestBody"])["schema"]?.ToString())" />
-
-        <!-- Build extraction prompt -->
-        <set-variable name="extractionPrompt" value="@{
-            var schema = (string)context.Variables["schema"];
-            var inputText = (string)context.Variables["inputText"];
-
-            return $@"Extract structured information from the following text according to the provided JSON schema.
-Return the extracted data as a valid JSON object that conforms to this schema: {schema}
-
-Text to extract from:
-{inputText}
-
-Return only the JSON object with the extracted data, no additional text.";
-        }" />
-
-        <!-- Transform request to OpenAI Chat Completion format -->
-        <set-body>@{
-            var extractionPrompt = (string)context.Variables["extractionPrompt"];
-
-            return new JObject(
-                new JProperty("messages", new JArray(
-                    new JObject(
-                        new JProperty("role", "system"),
-                        new JProperty("content", "You are a precise information extraction assistant. Extract data exactly as requested and return valid JSON.")
-                    ),
-                    new JObject(
-                        new JProperty("role", "user"),
-                        new JProperty("content", extractionPrompt)
-                    )
-                )),
-                new JProperty("max_tokens", 2000),
-                new JProperty("temperature", 0.1),
-                new JProperty("response_format", new JObject(
-                    new JProperty("type", "json_object")
-                ))
-            ).ToString();
-        }</set-body>
-
-        <!-- Set backend URL to Azure OpenAI endpoint -->
-        <set-backend-service base-url="{{ai-foundry-endpoint}}" />
-        <rewrite-uri template="/openai/deployments/gpt-5-mini/chat/completions?api-version=2024-02-01" />
-
-        <!-- Authenticate using Managed Identity -->
+        <set-backend-service backend-id="azure-openai-backend" />
         <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
-
-        <!-- Log request to Application Insights -->
-        <log-to-applicationinsights logger-id="appinsights-logger">@{
-            return new JObject(
-                new JProperty("EventName", "ExtractRequest"),
-                new JProperty("SubscriptionId", context.Subscription.Id),
-                new JProperty("RequestId", context.Variables["requestId"]),
-                new JProperty("ClientIP", context.Request.IpAddress),
-                new JProperty("Timestamp", DateTime.UtcNow),
-                new JProperty("InputLength", ((string)context.Variables["inputText"]).Length)
-            ).ToString();
-        }</log-to-applicationinsights>
+        <rewrite-uri template="/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview" />
     </inbound>
-
     <backend>
         <base />
     </backend>
-
     <outbound>
         <base />
-
-        <!-- Parse AI response -->
-        <set-variable name="aiResponse" value="@(context.Response.Body.As<JObject>(preserveContent: true))" />
-        <set-variable name="tokensUsed" value="@(((JObject)context.Variables["aiResponse"])["usage"]?["total_tokens"]?.ToString() ?? "0")" />
-        <set-variable name="extractedContent" value="@(((JObject)context.Variables["aiResponse"])["choices"]?[0]?["message"]?["content"]?.ToString() ?? "{}")" />
-
-        <!-- Transform response to simplified format -->
-        <set-body>@{
-            var extractedContent = (string)context.Variables["extractedContent"];
-            var tokensUsed = int.Parse((string)context.Variables["tokensUsed"]);
-            var requestId = (string)context.Variables["requestId"];
-
-            JObject extractedData;
-            try {
-                extractedData = JObject.Parse(extractedContent);
-            } catch {
-                extractedData = new JObject();
-            }
-
-            return new JObject(
-                new JProperty("extracted_data", extractedData),
-                new JProperty("confidence", 0.95),
-                new JProperty("tokens_used", tokensUsed),
-                new JProperty("request_id", requestId),
-                new JProperty("model", "gpt-5-mini")
-            ).ToString();
-        }</set-body>
-
-        <!-- Add token usage header -->
-        <set-header name="X-Token-Usage" exists-action="override">
-            <value>@((string)context.Variables["tokensUsed"])</value>
-        </set-header>
-
-        <!-- Log response to Application Insights -->
-        <log-to-applicationinsights logger-id="appinsights-logger">@{
-            return new JObject(
-                new JProperty("EventName", "ExtractResponse"),
-                new JProperty("SubscriptionId", context.Subscription.Id),
-                new JProperty("RequestId", context.Variables["requestId"]),
-                new JProperty("Timestamp", DateTime.UtcNow),
-                new JProperty("TokensUsed", context.Variables["tokensUsed"]),
-                new JProperty("StatusCode", context.Response.StatusCode)
-            ).ToString();
-        }</log-to-applicationinsights>
     </outbound>
-
     <on-error>
         <base />
-
-        <!-- Log error to Application Insights -->
-        <log-to-applicationinsights logger-id="appinsights-logger">@{
-            return new JObject(
-                new JProperty("EventName", "ExtractError"),
-                new JProperty("SubscriptionId", context.Subscription.Id),
-                new JProperty("RequestId", context.Variables.GetValueOrDefault<string>("requestId", "N/A")),
-                new JProperty("Timestamp", DateTime.UtcNow),
-                new JProperty("ErrorSource", context.LastError.Source),
-                new JProperty("ErrorMessage", context.LastError.Message),
-                new JProperty("StatusCode", context.Response.StatusCode)
-            ).ToString();
-        }</log-to-applicationinsights>
     </on-error>
 </policies>

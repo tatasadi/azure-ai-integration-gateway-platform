@@ -46,9 +46,9 @@ The Azure AI Integration Gateway is an enterprise-grade platform that provides c
 │                     Azure AI Foundry                                │
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  Azure AI Hub                                                │  │
-│  │  • GPT-5-mini (gpt-5-mini)    - Primary model                │  │
-│  │  • GPT-5-nano (gpt-5-nano)    - Cost-efficient alternative   │  │
-│  │  • 400K context window                                       │  │
+│  │  • GPT-4o (gpt-4o)            - Primary model                │  │
+│  │  • GPT-3.5-Turbo (gpt-35-turbo) - Cost-efficient alternative │  │
+│  │  • 128K context window                                       │  │
 │  │  • Multimodal support (text + images)                        │  │
 │  │  • Advanced reasoning capabilities                           │  │
 │  └──────────────────────────────────────────────────────────────┘  │
@@ -109,15 +109,15 @@ The Azure AI Integration Gateway is an enterprise-grade platform that provides c
 - **Cognitive Services Account**: Azure OpenAI service endpoint
 
 **Models**:
-- **GPT-5-mini** (gpt-5-mini): Primary model for complex tasks
-  - 400K context window
+- **GPT-4o** (gpt-4o): Primary model for complex tasks
+  - 128K context window
   - Multimodal (text + images)
   - Advanced reasoning capabilities
-  - Released August 2025
+  - Released May 2024
 
-- **GPT-5-nano** (gpt-5-nano): Cost-efficient alternative
-  - 400K context window
-  - Multimodal support
+- **GPT-3.5-Turbo** (gpt-35-turbo): Cost-efficient alternative
+  - 16K context window
+  - Text-based model
   - Optimized for speed and cost
 
 **Access Control**:
@@ -221,13 +221,13 @@ The Azure AI Integration Gateway is an enterprise-grade platform that provides c
 
 4. Backend Routing
    ↓
-   Set backend URL: https://{ai-foundry-endpoint}/openai/deployments/gpt-5-mini/chat/completions
+   Set backend URL: https://{ai-foundry-endpoint}/openai/deployments/gpt-4o/chat/completions
    Authenticate using Managed Identity
 
 5. Azure AI Foundry Processing
    ↓
    • Validate Managed Identity
-   • Process request with GPT-5-mini
+   • Process request with gpt-4o
    • Return response with usage metrics
 
 6. APIM Outbound Processing
