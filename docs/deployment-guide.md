@@ -372,6 +372,11 @@ terraformVersion: 1.5.0
 INFRACOST_API_KEY: <your-infracost-api-key>
 ```
 
+**Note**: Backend configuration (storage account, resource group, container) is hardcoded in the pipeline YAML file. If you need to use a different backend, update the values in [pipelines/azure-devops-pipeline.yml](../pipelines/azure-devops-pipeline.yml):
+- `backendAzureRmResourceGroupName`: Default is `rg-terraform`
+- `backendAzureRmStorageAccountName`: Default is `sttfstateta`
+- `backendAzureRmContainerName`: Default is `tfstate`
+
 #### Dev Variables (`ai-gateway-dev`)
 ```yaml
 PROJECT_NAME: aigateway
@@ -473,12 +478,12 @@ Create the Azure Storage Account for Terraform state:
 az login
 
 # Create resource group for Terraform state
-az group create --name rg-terraform-state --location eastus
+az group create --name rg-terraform --location eastus
 
-# Create storage account
+# Create storage account (must match the name in pipeline: sttfstateta)
 az storage account create \
-  --name sttfstateaigateway \
-  --resource-group rg-terraform-state \
+  --name sttfstateta \
+  --resource-group rg-terraform \
   --location eastus \
   --sku Standard_LRS \
   --encryption-services blob
@@ -486,8 +491,10 @@ az storage account create \
 # Create container
 az storage container create \
   --name tfstate \
-  --account-name sttfstateaigateway
+  --account-name sttfstateta
 ```
+
+**Important**: The storage account name `sttfstateta`, resource group `rg-terraform`, and container name `tfstate` are referenced in the pipeline configuration. If you use different names, you must update all occurrences in [pipelines/azure-devops-pipeline.yml](../pipelines/azure-devops-pipeline.yml).
 
 ### Step 2: Configure Azure DevOps
 

@@ -54,6 +54,10 @@ stages:
               command: 'init'
               workingDirectory: $(workingDirectory)
               backendServiceArm: $(azureServiceConnection)
+              backendAzureRmResourceGroupName: 'rg-terraform'
+              backendAzureRmStorageAccountName: 'sttfstateta'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'azure-ai-integration-dev.tfstate'
               commandOptions: '-backend=false'
 
           - task: TerraformTaskV2@2
@@ -76,6 +80,11 @@ stages:
       - job: ValidatePolicies
         displayName: 'Validate APIM Policies'
         steps:
+          - script: |
+              sudo apt-get update -qq
+              sudo apt-get install -y libxml2-utils
+            displayName: 'Install xmllint'
+
           - script: |
               echo "Validating APIM policy XML files..."
               FAILED=0
