@@ -80,7 +80,7 @@ output "apim_management_url" {
 # Usage Instructions
 output "getting_started" {
   description = "Instructions for getting started with the AI Gateway"
-  value = <<-EOT
+  value       = <<-EOT
 
     ========================================
     Azure AI Integration Gateway - Deployed

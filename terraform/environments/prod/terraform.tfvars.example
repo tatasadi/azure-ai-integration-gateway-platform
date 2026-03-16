@@ -1,0 +1,25 @@
+# Azure AI Integration Gateway - Production Environment
+# Copy this file to terraform.tfvars and customize for your environment
+# DO NOT commit terraform.tfvars - it should contain your actual values
+
+# Core Configuration
+project_name = "aigateway"
+environment  = "prod"
+location     = "eastus"
+
+# API Management Configuration
+apim_publisher_name  = "Your Name or Team Name"
+apim_publisher_email = "your-email@example.com"  # CHANGE THIS
+apim_sku_name        = "Standard_1"  # Standard tier (upgradeable to Premium)
+
+# AI Model Configuration
+enable_gpt4o       = true  # Enable GPT-4o for production
+enable_gpt35_turbo = true  # Enable GPT-3.5-Turbo for production
+
+# Resource Tags
+tags = {
+  Owner       = "platform-team"
+  CostCenter  = "engineering"
+  Project     = "ai-gateway"
+  Environment = "prod"
+}

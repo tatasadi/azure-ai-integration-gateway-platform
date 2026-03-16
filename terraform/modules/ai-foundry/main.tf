@@ -7,11 +7,15 @@ resource "azurerm_cognitive_account" "openai" {
   sku_name            = "S0"
 
   identity {
-    type = "SystemAssigned, UserAssigned"
+    type         = "SystemAssigned, UserAssigned"
     identity_ids = [var.managed_identity_id]
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }
 
 # GPT-4o deployment

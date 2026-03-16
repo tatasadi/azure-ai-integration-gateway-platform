@@ -1,14 +1,14 @@
 data "azurerm_client_config" "current" {}
 
 resource "azurerm_key_vault" "main" {
-  name                        = "kv-${var.project_name}-${var.environment}-${substr(md5(var.resource_group_name), 0, 6)}"
-  location                    = var.location
-  resource_group_name         = var.resource_group_name
-  tenant_id                   = var.tenant_id
-  sku_name                    = "standard"
-  soft_delete_retention_days  = 90
-  purge_protection_enabled    = var.environment == "prod" ? true : false
-  enable_rbac_authorization   = true
+  name                       = "kv-${var.project_name}-${var.environment}-${substr(md5(var.resource_group_name), 0, 6)}"
+  location                   = var.location
+  resource_group_name        = var.resource_group_name
+  tenant_id                  = var.tenant_id
+  sku_name                   = "standard"
+  soft_delete_retention_days = 90
+  purge_protection_enabled   = var.environment == "prod" ? true : false
+  enable_rbac_authorization  = true
 
   network_acls {
     default_action = "Allow"
@@ -16,6 +16,10 @@ resource "azurerm_key_vault" "main" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }
 
 # RBAC: Grant Key Vault Secrets User role to Managed Identity

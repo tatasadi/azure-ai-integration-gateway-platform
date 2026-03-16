@@ -59,7 +59,7 @@ if ! command -v az &> /dev/null; then
     log_error "Azure CLI is not installed"
     VALIDATION_PASSED=false
 else
-    AZ_VERSION=$(az version --query '\"azure-cli\"' -o tsv)
+    AZ_VERSION=$(az version -o json 2>/dev/null | grep -o '"azure-cli": "[^"]*' | cut -d'"' -f4 || echo "unknown")
     log_success "Azure CLI installed: v$AZ_VERSION"
 fi
 

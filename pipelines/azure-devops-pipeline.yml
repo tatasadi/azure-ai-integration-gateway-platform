@@ -29,6 +29,8 @@ variables:
     value: '1.5.0'
   - name: workingDirectory
     value: '$(System.DefaultWorkingDirectory)/terraform'
+  - name: azureServiceConnection
+    value: 'Azure-ServiceConnection'
 
 stages:
   # ============================================
@@ -51,11 +53,8 @@ stages:
               provider: 'azurerm'
               command: 'init'
               workingDirectory: $(workingDirectory)
-              backendServiceArm: 'Azure-ServiceConnection'
-              backendAzureRmResourceGroupName: 'rg-terraform-state'
-              backendAzureRmStorageAccountName: 'sttfstateaigateway'
-              backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'dev.terraform.tfstate'
+              backendServiceArm: $(azureServiceConnection)
+              commandOptions: '-backend=false'
 
           - task: TerraformTaskV2@2
             displayName: 'Terraform Validate'
@@ -79,11 +78,21 @@ stages:
         steps:
           - script: |
               echo "Validating APIM policy XML files..."
-              find apim-policies -name "*.xml" -exec xmllint --noout {} \;
-              if [ $? -eq 0 ]; then
+              FAILED=0
+
+              # Validate each XML file and track failures
+              while IFS= read -r -d '' file; do
+                echo "Validating: $file"
+                if ! xmllint --noout "$file" 2>&1; then
+                  echo "##vso[task.logissue type=error]Invalid XML in: $file"
+                  FAILED=1
+                fi
+              done < <(find apim-policies -name "*.xml" -print0)
+
+              if [ $FAILED -eq 0 ]; then
                 echo "All policy files are valid XML"
               else
-                echo "##vso[task.logissue type=error]Invalid XML found in policy files"
+                echo "##vso[task.logissue type=error]XML validation failed"
                 exit 1
               fi
             displayName: 'Validate XML Policies'
@@ -91,14 +100,11 @@ stages:
       - job: SecurityScan
         displayName: 'Security Scanning'
         steps:
-          - task: TerraformInstaller@0
-            displayName: 'Install Terraform'
-            inputs:
-              terraformVersion: $(terraformVersion)
-
           - script: |
               echo "Running security scan with Checkov..."
               pip install checkov
+              # CKV_AZURE_109: Ensure that key vault allows firewall rules settings (conflicts with internal-only access pattern)
+              # CKV_AZURE_110: Ensure that key vault enables purge protection (may conflict with dev/test environments)
               checkov -d terraform/ --skip-check CKV_AZURE_109,CKV_AZURE_110 --compact --quiet
             displayName: 'Run Checkov Security Scan'
             continueOnError: true
@@ -127,27 +133,68 @@ stages:
               provider: 'azurerm'
               command: 'init'
               workingDirectory: $(workingDirectory)
-              backendServiceArm: 'Azure-ServiceConnection'
-              backendAzureRmResourceGroupName: 'rg-terraform-state'
-              backendAzureRmStorageAccountName: 'sttfstateaigateway'
+              backendServiceArm: $(azureServiceConnection)
+              backendAzureRmResourceGroupName: 'rg-terraform'
+              backendAzureRmStorageAccountName: 'sttfstateta'
               backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'dev.terraform.tfstate'
+              backendAzureRmKey: 'azure-ai-integration-dev.tfstate'
 
           - task: TerraformTaskV2@2
             displayName: 'Terraform Plan'
             inputs:
               provider: 'azurerm'
               command: 'plan'
-              commandOptions: '-var="environment=dev" -out=$(Build.ArtifactStagingDirectory)/tfplan-dev'
+              commandOptions: '-var="project_name=$(PROJECT_NAME)" -var="environment=$(ENVIRONMENT)" -var="location=$(LOCATION)" -var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" -var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" -var="apim_sku_name=$(APIM_SKU_NAME)" -var="enable_gpt4o=$(ENABLE_GPT4O)" -var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" -out=tfplan-dev'
               workingDirectory: $(workingDirectory)
-              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+              environmentServiceNameAzureRM: $(azureServiceConnection)
 
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Plan Artifact'
             inputs:
-              targetPath: '$(Build.ArtifactStagingDirectory)/tfplan-dev'
+              targetPath: '$(workingDirectory)/tfplan-dev'
               artifact: 'tfplan-dev'
               publishLocation: 'pipeline'
+
+          - task: Cache@2
+            displayName: 'Cache Infracost'
+            inputs:
+              key: 'infracost | "$(Agent.OS)"'
+              path: $(Pipeline.Workspace)/.infracost
+              cacheHitVar: INFRACOST_CACHE_RESTORED
+
+          - script: |
+              # Install Infracost if not cached
+              if [ "$(INFRACOST_CACHE_RESTORED)" != "true" ]; then
+                echo "Installing Infracost..."
+                curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+                mkdir -p $(Pipeline.Workspace)/.infracost
+                cp /usr/local/bin/infracost $(Pipeline.Workspace)/.infracost/ || cp ~/.local/bin/infracost $(Pipeline.Workspace)/.infracost/ || true
+              else
+                echo "Using cached Infracost"
+                sudo cp $(Pipeline.Workspace)/.infracost/infracost /usr/local/bin/ || cp $(Pipeline.Workspace)/.infracost/infracost ~/.local/bin/
+              fi
+
+              # Generate cost estimate with Terraform variables
+              cd $(workingDirectory)
+              infracost breakdown --path . \
+                --terraform-var="project_name=$(PROJECT_NAME)" \
+                --terraform-var="environment=$(ENVIRONMENT)" \
+                --terraform-var="location=$(LOCATION)" \
+                --terraform-var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" \
+                --terraform-var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" \
+                --terraform-var="apim_sku_name=$(APIM_SKU_NAME)" \
+                --terraform-var="enable_gpt4o=$(ENABLE_GPT4O)" \
+                --terraform-var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" \
+                --format json \
+                --out-file $(Build.ArtifactStagingDirectory)/infracost-dev.json || true
+
+              # Display cost estimate
+              infracost output --path $(Build.ArtifactStagingDirectory)/infracost-dev.json \
+                --format table || true
+            displayName: 'Cost Estimation with Infracost'
+            env:
+              INFRACOST_API_KEY: $(INFRACOST_API_KEY)
+            continueOnError: true
 
   # ============================================
   # Stage 3: Deploy (Dev)
@@ -183,11 +230,11 @@ stages:
                     provider: 'azurerm'
                     command: 'init'
                     workingDirectory: $(workingDirectory)
-                    backendServiceArm: 'Azure-ServiceConnection'
-                    backendAzureRmResourceGroupName: 'rg-terraform-state'
-                    backendAzureRmStorageAccountName: 'sttfstateaigateway'
+                    backendServiceArm: $(azureServiceConnection)
+                    backendAzureRmResourceGroupName: 'rg-terraform'
+                    backendAzureRmStorageAccountName: 'sttfstateta'
                     backendAzureRmContainerName: 'tfstate'
-                    backendAzureRmKey: 'dev.terraform.tfstate'
+                    backendAzureRmKey: 'azure-ai-integration-dev.tfstate'
 
                 - task: TerraformTaskV2@2
                   displayName: 'Terraform Apply'
@@ -196,16 +243,32 @@ stages:
                     command: 'apply'
                     commandOptions: 'tfplan-dev'
                     workingDirectory: $(workingDirectory)
-                    environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+                    environmentServiceNameAzureRM: $(azureServiceConnection)
+
+                - task: Bash@3
+                  displayName: 'Extract Terraform Outputs'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      cd $(workingDirectory)
+
+                      # Extract outputs from Terraform
+                      APIM_URL=$(terraform output -raw apim_gateway_url)
+
+                      # Set pipeline variables for subsequent steps
+                      echo "##vso[task.setvariable variable=APIM_GATEWAY_URL]$APIM_URL"
+
+                      echo "APIM Gateway URL: $APIM_URL"
+                      echo "Note: Subscription key must be obtained from Azure Portal > APIM > Subscriptions"
 
                 - task: Bash@3
                   displayName: 'Run Smoke Tests'
                   inputs:
-                    targetType: 'inline'
-                    script: |
-                      echo "Running smoke tests..."
-                      # Add smoke test commands here
-                      echo "Smoke tests completed"
+                    targetType: 'filePath'
+                    filePath: '$(System.DefaultWorkingDirectory)/scripts/smoke-test.sh'
+                    arguments: '$(APIM_GATEWAY_URL)'
+                    workingDirectory: '$(System.DefaultWorkingDirectory)'
+                  continueOnError: true
 
   # ============================================
   # Stage 4: Plan (Staging)
@@ -231,27 +294,68 @@ stages:
               provider: 'azurerm'
               command: 'init'
               workingDirectory: $(workingDirectory)
-              backendServiceArm: 'Azure-ServiceConnection'
-              backendAzureRmResourceGroupName: 'rg-terraform-state'
-              backendAzureRmStorageAccountName: 'sttfstateaigateway'
+              backendServiceArm: $(azureServiceConnection)
+              backendAzureRmResourceGroupName: 'rg-terraform'
+              backendAzureRmStorageAccountName: 'sttfstateta'
               backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'staging.terraform.tfstate'
+              backendAzureRmKey: 'azure-ai-integration-staging.tfstate'
 
           - task: TerraformTaskV2@2
             displayName: 'Terraform Plan'
             inputs:
               provider: 'azurerm'
               command: 'plan'
-              commandOptions: '-var="environment=staging" -out=$(Build.ArtifactStagingDirectory)/tfplan-staging'
+              commandOptions: '-var="project_name=$(PROJECT_NAME)" -var="environment=$(ENVIRONMENT)" -var="location=$(LOCATION)" -var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" -var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" -var="apim_sku_name=$(APIM_SKU_NAME)" -var="enable_gpt4o=$(ENABLE_GPT4O)" -var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" -out=tfplan-staging'
               workingDirectory: $(workingDirectory)
-              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+              environmentServiceNameAzureRM: $(azureServiceConnection)
 
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Plan Artifact'
             inputs:
-              targetPath: '$(Build.ArtifactStagingDirectory)/tfplan-staging'
+              targetPath: '$(workingDirectory)/tfplan-staging'
               artifact: 'tfplan-staging'
               publishLocation: 'pipeline'
+
+          - task: Cache@2
+            displayName: 'Cache Infracost'
+            inputs:
+              key: 'infracost | "$(Agent.OS)"'
+              path: $(Pipeline.Workspace)/.infracost
+              cacheHitVar: INFRACOST_CACHE_RESTORED
+
+          - script: |
+              # Install Infracost if not cached
+              if [ "$(INFRACOST_CACHE_RESTORED)" != "true" ]; then
+                echo "Installing Infracost..."
+                curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+                mkdir -p $(Pipeline.Workspace)/.infracost
+                cp /usr/local/bin/infracost $(Pipeline.Workspace)/.infracost/ || cp ~/.local/bin/infracost $(Pipeline.Workspace)/.infracost/ || true
+              else
+                echo "Using cached Infracost"
+                sudo cp $(Pipeline.Workspace)/.infracost/infracost /usr/local/bin/ || cp $(Pipeline.Workspace)/.infracost/infracost ~/.local/bin/
+              fi
+
+              # Generate cost estimate with Terraform variables
+              cd $(workingDirectory)
+              infracost breakdown --path . \
+                --terraform-var="project_name=$(PROJECT_NAME)" \
+                --terraform-var="environment=$(ENVIRONMENT)" \
+                --terraform-var="location=$(LOCATION)" \
+                --terraform-var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" \
+                --terraform-var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" \
+                --terraform-var="apim_sku_name=$(APIM_SKU_NAME)" \
+                --terraform-var="enable_gpt4o=$(ENABLE_GPT4O)" \
+                --terraform-var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" \
+                --format json \
+                --out-file $(Build.ArtifactStagingDirectory)/infracost-staging.json || true
+
+              # Display cost estimate
+              infracost output --path $(Build.ArtifactStagingDirectory)/infracost-staging.json \
+                --format table || true
+            displayName: 'Cost Estimation with Infracost'
+            env:
+              INFRACOST_API_KEY: $(INFRACOST_API_KEY)
+            continueOnError: true
 
   # ============================================
   # Stage 5: Deploy (Staging)
@@ -287,11 +391,11 @@ stages:
                     provider: 'azurerm'
                     command: 'init'
                     workingDirectory: $(workingDirectory)
-                    backendServiceArm: 'Azure-ServiceConnection'
-                    backendAzureRmResourceGroupName: 'rg-terraform-state'
-                    backendAzureRmStorageAccountName: 'sttfstateaigateway'
+                    backendServiceArm: $(azureServiceConnection)
+                    backendAzureRmResourceGroupName: 'rg-terraform'
+                    backendAzureRmStorageAccountName: 'sttfstateta'
                     backendAzureRmContainerName: 'tfstate'
-                    backendAzureRmKey: 'staging.terraform.tfstate'
+                    backendAzureRmKey: 'azure-ai-integration-staging.tfstate'
 
                 - task: TerraformTaskV2@2
                   displayName: 'Terraform Apply'
@@ -300,16 +404,41 @@ stages:
                     command: 'apply'
                     commandOptions: 'tfplan-staging'
                     workingDirectory: $(workingDirectory)
-                    environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+                    environmentServiceNameAzureRM: $(azureServiceConnection)
+
+                - task: Bash@3
+                  displayName: 'Extract Terraform Outputs'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      cd $(workingDirectory)
+
+                      # Extract outputs from Terraform
+                      APIM_URL=$(terraform output -raw apim_gateway_url)
+
+                      # Set pipeline variables for subsequent steps
+                      echo "##vso[task.setvariable variable=APIM_GATEWAY_URL]$APIM_URL"
+
+                      echo "APIM Gateway URL: $APIM_URL"
+                      echo "Note: Subscription key must be obtained from Azure Portal > APIM > Subscriptions"
 
                 - task: Bash@3
                   displayName: 'Run Integration Tests'
                   inputs:
-                    targetType: 'inline'
-                    script: |
-                      echo "Running integration tests..."
-                      # Add integration test commands here
-                      echo "Integration tests completed"
+                    targetType: 'filePath'
+                    filePath: '$(System.DefaultWorkingDirectory)/scripts/smoke-test.sh'
+                    arguments: '$(APIM_GATEWAY_URL)'
+                    workingDirectory: '$(System.DefaultWorkingDirectory)'
+                  continueOnError: false  # Fail staging deployment if tests fail
+
+                - script: |
+                    echo "Running additional integration tests..."
+                    cd tests/integration
+                    # Uncomment when integration tests are implemented
+                    # python -m pytest test_ai_gateway.py -v
+                    echo "Integration tests completed"
+                  displayName: 'Run Python Integration Tests'
+                  continueOnError: true
 
   # ============================================
   # Stage 6: Plan (Production)
@@ -335,27 +464,68 @@ stages:
               provider: 'azurerm'
               command: 'init'
               workingDirectory: $(workingDirectory)
-              backendServiceArm: 'Azure-ServiceConnection'
-              backendAzureRmResourceGroupName: 'rg-terraform-state'
-              backendAzureRmStorageAccountName: 'sttfstateaigateway'
+              backendServiceArm: $(azureServiceConnection)
+              backendAzureRmResourceGroupName: 'rg-terraform'
+              backendAzureRmStorageAccountName: 'sttfstateta'
               backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'prod.terraform.tfstate'
+              backendAzureRmKey: 'azure-ai-integration-prod.tfstate'
 
           - task: TerraformTaskV2@2
             displayName: 'Terraform Plan'
             inputs:
               provider: 'azurerm'
               command: 'plan'
-              commandOptions: '-var="environment=prod" -out=$(Build.ArtifactStagingDirectory)/tfplan-prod'
+              commandOptions: '-var="project_name=$(PROJECT_NAME)" -var="environment=$(ENVIRONMENT)" -var="location=$(LOCATION)" -var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" -var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" -var="apim_sku_name=$(APIM_SKU_NAME)" -var="enable_gpt4o=$(ENABLE_GPT4O)" -var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" -out=tfplan-prod'
               workingDirectory: $(workingDirectory)
-              environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+              environmentServiceNameAzureRM: $(azureServiceConnection)
 
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Plan Artifact'
             inputs:
-              targetPath: '$(Build.ArtifactStagingDirectory)/tfplan-prod'
+              targetPath: '$(workingDirectory)/tfplan-prod'
               artifact: 'tfplan-prod'
               publishLocation: 'pipeline'
+
+          - task: Cache@2
+            displayName: 'Cache Infracost'
+            inputs:
+              key: 'infracost | "$(Agent.OS)"'
+              path: $(Pipeline.Workspace)/.infracost
+              cacheHitVar: INFRACOST_CACHE_RESTORED
+
+          - script: |
+              # Install Infracost if not cached
+              if [ "$(INFRACOST_CACHE_RESTORED)" != "true" ]; then
+                echo "Installing Infracost..."
+                curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+                mkdir -p $(Pipeline.Workspace)/.infracost
+                cp /usr/local/bin/infracost $(Pipeline.Workspace)/.infracost/ || cp ~/.local/bin/infracost $(Pipeline.Workspace)/.infracost/ || true
+              else
+                echo "Using cached Infracost"
+                sudo cp $(Pipeline.Workspace)/.infracost/infracost /usr/local/bin/ || cp $(Pipeline.Workspace)/.infracost/infracost ~/.local/bin/
+              fi
+
+              # Generate cost estimate with Terraform variables
+              cd $(workingDirectory)
+              infracost breakdown --path . \
+                --terraform-var="project_name=$(PROJECT_NAME)" \
+                --terraform-var="environment=$(ENVIRONMENT)" \
+                --terraform-var="location=$(LOCATION)" \
+                --terraform-var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" \
+                --terraform-var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" \
+                --terraform-var="apim_sku_name=$(APIM_SKU_NAME)" \
+                --terraform-var="enable_gpt4o=$(ENABLE_GPT4O)" \
+                --terraform-var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" \
+                --format json \
+                --out-file $(Build.ArtifactStagingDirectory)/infracost-prod.json || true
+
+              # Display cost estimate
+              infracost output --path $(Build.ArtifactStagingDirectory)/infracost-prod.json \
+                --format table || true
+            displayName: 'Cost Estimation with Infracost'
+            env:
+              INFRACOST_API_KEY: $(INFRACOST_API_KEY)
+            continueOnError: true
 
   # ============================================
   # Stage 7: Deploy (Production)
@@ -391,11 +561,11 @@ stages:
                     provider: 'azurerm'
                     command: 'init'
                     workingDirectory: $(workingDirectory)
-                    backendServiceArm: 'Azure-ServiceConnection'
-                    backendAzureRmResourceGroupName: 'rg-terraform-state'
-                    backendAzureRmStorageAccountName: 'sttfstateaigateway'
+                    backendServiceArm: $(azureServiceConnection)
+                    backendAzureRmResourceGroupName: 'rg-terraform'
+                    backendAzureRmStorageAccountName: 'sttfstateta'
                     backendAzureRmContainerName: 'tfstate'
-                    backendAzureRmKey: 'prod.terraform.tfstate'
+                    backendAzureRmKey: 'azure-ai-integration-prod.tfstate'
 
                 - task: TerraformTaskV2@2
                   displayName: 'Terraform Apply'
@@ -404,13 +574,29 @@ stages:
                     command: 'apply'
                     commandOptions: 'tfplan-prod'
                     workingDirectory: $(workingDirectory)
-                    environmentServiceNameAzureRM: 'Azure-ServiceConnection'
+                    environmentServiceNameAzureRM: $(azureServiceConnection)
+
+                - task: Bash@3
+                  displayName: 'Extract Terraform Outputs'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      cd $(workingDirectory)
+
+                      # Extract outputs from Terraform
+                      APIM_URL=$(terraform output -raw apim_gateway_url)
+
+                      # Set pipeline variables for subsequent steps
+                      echo "##vso[task.setvariable variable=APIM_GATEWAY_URL]$APIM_URL"
+
+                      echo "APIM Gateway URL: $APIM_URL"
+                      echo "Note: Subscription key must be obtained from Azure Portal > APIM > Subscriptions"
 
                 - task: Bash@3
                   displayName: 'Health Check'
                   inputs:
-                    targetType: 'inline'
-                    script: |
-                      echo "Running production health checks..."
-                      # Add health check commands here
-                      echo "Health checks completed successfully"
+                    targetType: 'filePath'
+                    filePath: '$(System.DefaultWorkingDirectory)/scripts/smoke-test.sh'
+                    arguments: '$(APIM_GATEWAY_URL)'
+                    workingDirectory: '$(System.DefaultWorkingDirectory)'
+                  continueOnError: false  # Fail deployment if health checks fail in prod

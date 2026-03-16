@@ -8,11 +8,15 @@ resource "azurerm_api_management" "main" {
   sku_name            = var.sku_name
 
   identity {
-    type = "UserAssigned"
+    type         = "UserAssigned"
     identity_ids = [var.managed_identity_id]
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }
 
 # Application Insights Logger

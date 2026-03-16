@@ -5,6 +5,10 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
   location            = var.location
   tags                = var.tags
 
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
+
   dashboard_properties = jsonencode({
     lenses = {
       "0" = {
@@ -12,10 +16,10 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
         parts = {
           "0" = {
             position = {
-              x        = 0
-              y        = 0
-              rowSpan  = 4
-              colSpan  = 6
+              x       = 0
+              y       = 0
+              rowSpan = 4
+              colSpan = 6
             }
             metadata = {
               type = "Extension/HubsExtension/PartType/MonitorChartPart"
@@ -25,7 +29,7 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
                   value = var.apim_id
                 },
                 {
-                  name = "TimeRange"
+                  name  = "TimeRange"
                   value = "P1D"
                 }
               ]
@@ -39,8 +43,8 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
                         resourceMetadata = {
                           id = var.apim_id
                         }
-                        name         = "Requests"
-                        namespace    = "Microsoft.ApiManagement/service"
+                        name            = "Requests"
+                        namespace       = "Microsoft.ApiManagement/service"
                         aggregationType = "Total"
                       }
                     ]
@@ -51,10 +55,10 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
           }
           "1" = {
             position = {
-              x        = 6
-              y        = 0
-              rowSpan  = 4
-              colSpan  = 6
+              x       = 6
+              y       = 0
+              rowSpan = 4
+              colSpan = 6
             }
             metadata = {
               type = "Extension/HubsExtension/PartType/MonitorChartPart"
@@ -64,7 +68,7 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
                   value = var.apim_id
                 },
                 {
-                  name = "TimeRange"
+                  name  = "TimeRange"
                   value = "P1D"
                 }
               ]
@@ -78,8 +82,8 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
                         resourceMetadata = {
                           id = var.apim_id
                         }
-                        name         = "Requests"
-                        namespace    = "Microsoft.ApiManagement/service"
+                        name            = "Requests"
+                        namespace       = "Microsoft.ApiManagement/service"
                         aggregationType = "Total"
                         dimensions = [
                           {
@@ -97,10 +101,10 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
           }
           "2" = {
             position = {
-              x        = 0
-              y        = 4
-              rowSpan  = 4
-              colSpan  = 6
+              x       = 0
+              y       = 4
+              rowSpan = 4
+              colSpan = 6
             }
             metadata = {
               type = "Extension/HubsExtension/PartType/MonitorChartPart"
@@ -110,7 +114,7 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
                   value = var.apim_id
                 },
                 {
-                  name = "TimeRange"
+                  name  = "TimeRange"
                   value = "P1D"
                 }
               ]
@@ -124,8 +128,8 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
                         resourceMetadata = {
                           id = var.apim_id
                         }
-                        name         = "Duration"
-                        namespace    = "Microsoft.ApiManagement/service"
+                        name            = "Duration"
+                        namespace       = "Microsoft.ApiManagement/service"
                         aggregationType = "Average"
                       }
                     ]
@@ -136,10 +140,10 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
           }
           "3" = {
             position = {
-              x        = 6
-              y        = 4
-              rowSpan  = 4
-              colSpan  = 6
+              x       = 6
+              y       = 4
+              rowSpan = 4
+              colSpan = 6
             }
             metadata = {
               type = "Extension/HubsExtension/PartType/MonitorChartPart"
@@ -149,7 +153,7 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
                   value = var.apim_id
                 },
                 {
-                  name = "TimeRange"
+                  name  = "TimeRange"
                   value = "P1D"
                 }
               ]
@@ -163,8 +167,8 @@ resource "azurerm_portal_dashboard" "ai_gateway" {
                         resourceMetadata = {
                           id = var.apim_id
                         }
-                        name         = "Availability"
-                        namespace    = "Microsoft.ApiManagement/service"
+                        name            = "Availability"
+                        namespace       = "Microsoft.ApiManagement/service"
                         aggregationType = "Average"
                       }
                     ]
@@ -189,6 +193,10 @@ resource "azurerm_application_insights_workbook" "ai_gateway_detailed" {
   category            = "workbook"
   tags                = var.tags
 
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
+
   data_json = jsonencode({
     version = "Notebook/1.0"
     items = [
@@ -201,8 +209,8 @@ resource "azurerm_application_insights_workbook" "ai_gateway_detailed" {
       {
         type = 3
         content = {
-          version = "KqlItem/1.0"
-          query = <<-QUERY
+          version       = "KqlItem/1.0"
+          query         = <<-QUERY
             customEvents
             | where name == "AIGatewayRequest"
             | extend Operation = tostring(customDimensions.Operation),
@@ -217,18 +225,18 @@ resource "azurerm_application_insights_workbook" "ai_gateway_detailed" {
               by Operation, bin(timestamp, 1h)
             | order by timestamp desc
           QUERY
-          size = 0
-          title = "Request Summary by Operation"
-          queryType = 0
-          resourceType = "microsoft.insights/components"
+          size          = 0
+          title         = "Request Summary by Operation"
+          queryType     = 0
+          resourceType  = "microsoft.insights/components"
           visualization = "table"
         }
       },
       {
         type = 3
         content = {
-          version = "KqlItem/1.0"
-          query = <<-QUERY
+          version       = "KqlItem/1.0"
+          query         = <<-QUERY
             customMetrics
             | where name == "TokenUsage"
             | extend Operation = tostring(customDimensions.Operation),
@@ -240,18 +248,18 @@ resource "azurerm_application_insights_workbook" "ai_gateway_detailed" {
               by Operation, Model, bin(timestamp, 1h)
             | order by timestamp desc
           QUERY
-          size = 0
-          title = "Token Usage Analysis"
-          queryType = 0
-          resourceType = "microsoft.insights/components"
+          size          = 0
+          title         = "Token Usage Analysis"
+          queryType     = 0
+          resourceType  = "microsoft.insights/components"
           visualization = "table"
         }
       },
       {
         type = 3
         content = {
-          version = "KqlItem/1.0"
-          query = <<-QUERY
+          version       = "KqlItem/1.0"
+          query         = <<-QUERY
             customMetrics
             | where name == "EstimatedCost"
             | extend SubscriptionId = tostring(customDimensions.SubscriptionId),
@@ -261,10 +269,10 @@ resource "azurerm_application_insights_workbook" "ai_gateway_detailed" {
               by SubscriptionId, Operation, bin(timestamp, 1d)
             | order by EstimatedCost desc
           QUERY
-          size = 0
-          title = "Cost Analysis by Subscription"
-          queryType = 0
-          resourceType = "microsoft.insights/components"
+          size          = 0
+          title         = "Cost Analysis by Subscription"
+          queryType     = 0
+          resourceType  = "microsoft.insights/components"
           visualization = "table"
         }
       }

@@ -1,0 +1,25 @@
+# Azure AI Integration Gateway - Development Environment
+# Copy this file to terraform.tfvars and customize for your environment
+# DO NOT commit terraform.tfvars - it should contain your actual values
+
+# Core Configuration
+project_name = "aigateway"
+environment  = "dev"
+location     = "eastus"
+
+# API Management Configuration
+apim_publisher_name  = "Your Name or Team Name"
+apim_publisher_email = "your-email@example.com"  # CHANGE THIS
+apim_sku_name        = "Developer_1"  # Cost-effective Developer tier for dev environment
+
+# AI Model Configuration
+enable_gpt4o       = true   # Enable GPT-4o for testing
+enable_gpt35_turbo = false  # Disable GPT-3.5-Turbo to reduce costs in dev
+
+# Resource Tags
+tags = {
+  Owner       = "platform-team"
+  CostCenter  = "engineering"
+  Project     = "ai-gateway"
+  Environment = "dev"
+}

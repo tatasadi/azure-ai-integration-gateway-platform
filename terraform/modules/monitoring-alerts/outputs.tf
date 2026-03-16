@@ -21,8 +21,8 @@ output "workbook_name" {
 output "alert_ids" {
   description = "IDs of all configured alerts"
   value = {
-    high_error_rate        = azurerm_monitor_metric_alert.high_error_rate.id
-    apim_availability      = azurerm_monitor_metric_alert.apim_availability.id
+    high_error_rate       = azurerm_monitor_metric_alert.high_error_rate.id
+    apim_availability     = azurerm_monitor_metric_alert.apim_availability.id
     high_latency          = azurerm_monitor_metric_alert.high_latency.id
     rate_limit_exhaustion = azurerm_monitor_metric_alert.rate_limit_exhaustion.id
     unauthorized_access   = azurerm_monitor_metric_alert.unauthorized_access.id

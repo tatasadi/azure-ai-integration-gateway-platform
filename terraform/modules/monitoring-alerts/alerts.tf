@@ -27,6 +27,10 @@ resource "azurerm_monitor_metric_alert" "high_error_rate" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }
 
 # Alert: APIM Capacity (health indicator)
@@ -52,6 +56,10 @@ resource "azurerm_monitor_metric_alert" "apim_availability" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }
 
 # Alert: High Latency (>5s P95)
@@ -77,6 +85,10 @@ resource "azurerm_monitor_metric_alert" "high_latency" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }
 
 # Alert: Rate Limit Exhaustion
@@ -108,6 +120,10 @@ resource "azurerm_monitor_metric_alert" "rate_limit_exhaustion" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }
 
 # Alert: Unauthorized Access Attempts
@@ -139,17 +155,21 @@ resource "azurerm_monitor_metric_alert" "unauthorized_access" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }
 
 # Scheduled Query Alert: High Token Usage
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "high_token_usage" {
-  name                = "alert-${var.project_name}-${var.environment}-high-token-usage"
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  scopes              = [var.application_insights_id]
-  description         = "Alert when token usage is unusually high"
-  severity            = 3
-  enabled             = true
+  name                 = "alert-${var.project_name}-${var.environment}-high-token-usage"
+  resource_group_name  = var.resource_group_name
+  location             = var.location
+  scopes               = [var.application_insights_id]
+  description          = "Alert when token usage is unusually high"
+  severity             = 3
+  enabled              = true
   evaluation_frequency = "PT5M"
   window_duration      = "PT15M"
 
@@ -177,17 +197,21 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "high_token_usage" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }
 
 # Scheduled Query Alert: Cost Tracking Per Subscription
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "cost_threshold" {
-  name                = "alert-${var.project_name}-${var.environment}-cost-threshold"
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  scopes              = [var.application_insights_id]
-  description         = "Alert when daily cost per subscription exceeds threshold"
-  severity            = 3
-  enabled             = true
+  name                 = "alert-${var.project_name}-${var.environment}-cost-threshold"
+  resource_group_name  = var.resource_group_name
+  location             = var.location
+  scopes               = [var.application_insights_id]
+  description          = "Alert when daily cost per subscription exceeds threshold"
+  severity             = 3
+  enabled              = true
   evaluation_frequency = "PT1H"
   window_duration      = "P1D"
 
@@ -215,4 +239,8 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "cost_threshold" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }

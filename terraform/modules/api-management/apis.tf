@@ -1,12 +1,12 @@
 # AI Services Gateway API
 resource "azurerm_api_management_api" "ai_gateway" {
-  name                = "ai-services-gateway"
-  resource_group_name = var.resource_group_name
-  api_management_name = azurerm_api_management.main.name
-  revision            = "1"
-  display_name        = "AI Services Gateway"
-  path                = "ai"
-  protocols           = ["https"]
+  name                  = "ai-services-gateway"
+  resource_group_name   = var.resource_group_name
+  api_management_name   = azurerm_api_management.main.name
+  revision              = "1"
+  display_name          = "AI Services Gateway"
+  path                  = "ai"
+  protocols             = ["https"]
   subscription_required = true
 
   description = "Enterprise AI Gateway providing text summarization, information extraction, and other AI services"
@@ -29,7 +29,7 @@ resource "azurerm_api_management_api_operation" "summarize" {
     representation {
       content_type = "application/json"
       example {
-        name  = "default"
+        name = "default"
         value = jsonencode({
           text       = "Long article text here..."
           max_length = 500
@@ -46,7 +46,7 @@ resource "azurerm_api_management_api_operation" "summarize" {
     representation {
       content_type = "application/json"
       example {
-        name  = "default"
+        name = "default"
         value = jsonencode({
           summary     = "This is the summarized text..."
           tokens_used = 1234
@@ -75,7 +75,7 @@ resource "azurerm_api_management_api_operation" "extract" {
     representation {
       content_type = "application/json"
       example {
-        name  = "default"
+        name = "default"
         value = jsonencode({
           text = "Invoice details here..."
           schema = {
@@ -97,7 +97,7 @@ resource "azurerm_api_management_api_operation" "extract" {
     representation {
       content_type = "application/json"
       example {
-        name  = "default"
+        name = "default"
         value = jsonencode({
           extracted_data = {
             invoice_number = "12345"
@@ -131,7 +131,7 @@ resource "azurerm_api_management_api_operation" "health" {
     representation {
       content_type = "application/json"
       example {
-        name  = "default"
+        name = "default"
         value = jsonencode({
           status    = "healthy"
           timestamp = "2026-03-11T10:30:00Z"

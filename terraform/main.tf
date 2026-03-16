@@ -16,13 +16,8 @@ terraform {
     }
   }
 
-  # Backend configuration for Azure Storage
-  backend "azurerm" {
-    resource_group_name  = "rg-terraform"
-    storage_account_name = "sttfstateta"
-    container_name       = "tfstate"
-    key                  = "azure-ai-integration.tfstate"
-  }
+  # Backend configuration is defined in backend.tf
+  # This allows for better organization and environment-specific state management
 }
 
 provider "azurerm" {
@@ -54,53 +49,53 @@ module "resource_group" {
 module "managed_identity" {
   source = "./modules/managed-identity"
 
-  project_name       = var.project_name
-  environment        = var.environment
-  location           = var.location
+  project_name        = var.project_name
+  environment         = var.environment
+  location            = var.location
   resource_group_name = module.resource_group.name
-  tags               = local.common_tags
+  tags                = local.common_tags
 }
 
 # Monitoring Module (Application Insights, Log Analytics)
 module "monitoring" {
   source = "./modules/monitoring"
 
-  project_name       = var.project_name
-  environment        = var.environment
-  location           = var.location
+  project_name        = var.project_name
+  environment         = var.environment
+  location            = var.location
   resource_group_name = module.resource_group.name
-  tags               = local.common_tags
+  tags                = local.common_tags
 }
 
 # Key Vault Module
 module "key_vault" {
   source = "./modules/key-vault"
 
-  project_name         = var.project_name
-  environment          = var.environment
-  location             = var.location
-  resource_group_name  = module.resource_group.name
-  tenant_id            = data.azurerm_client_config.current.tenant_id
-  managed_identity_id  = module.managed_identity.principal_id
+  project_name               = var.project_name
+  environment                = var.environment
+  location                   = var.location
+  resource_group_name        = module.resource_group.name
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  managed_identity_id        = module.managed_identity.principal_id
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
-  tags                 = local.common_tags
+  tags                       = local.common_tags
 }
 
 # Azure AI Foundry Module
 module "ai_foundry" {
   source = "./modules/ai-foundry"
 
-  project_name       = var.project_name
-  environment        = var.environment
-  location           = var.location
-  resource_group_name = module.resource_group.name
-  managed_identity_id = module.managed_identity.id
+  project_name                  = var.project_name
+  environment                   = var.environment
+  location                      = var.location
+  resource_group_name           = module.resource_group.name
+  managed_identity_id           = module.managed_identity.id
   managed_identity_principal_id = module.managed_identity.principal_id
-  log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
-  tags               = local.common_tags
+  log_analytics_workspace_id    = module.monitoring.log_analytics_workspace_id
+  tags                          = local.common_tags
 
   # AI model configurations
-  enable_gpt4o = var.enable_gpt4o
+  enable_gpt4o       = var.enable_gpt4o
   enable_gpt35_turbo = var.enable_gpt35_turbo
 }
 
@@ -108,33 +103,33 @@ module "ai_foundry" {
 module "api_management" {
   source = "./modules/api-management"
 
-  project_name       = var.project_name
-  environment        = var.environment
-  location           = var.location
-  resource_group_name = module.resource_group.name
-  publisher_name     = var.apim_publisher_name
-  publisher_email    = var.apim_publisher_email
-  sku_name           = var.apim_sku_name
-  managed_identity_id = module.managed_identity.id
-  application_insights_id = module.monitoring.application_insights_id
+  project_name                             = var.project_name
+  environment                              = var.environment
+  location                                 = var.location
+  resource_group_name                      = module.resource_group.name
+  publisher_name                           = var.apim_publisher_name
+  publisher_email                          = var.apim_publisher_email
+  sku_name                                 = var.apim_sku_name
+  managed_identity_id                      = module.managed_identity.id
+  application_insights_id                  = module.monitoring.application_insights_id
   application_insights_instrumentation_key = module.monitoring.application_insights_instrumentation_key
-  ai_foundry_endpoint = module.ai_foundry.endpoint
-  log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
-  tags               = local.common_tags
+  ai_foundry_endpoint                      = module.ai_foundry.endpoint
+  log_analytics_workspace_id               = module.monitoring.log_analytics_workspace_id
+  tags                                     = local.common_tags
 }
 
 # Monitoring Alerts and Dashboards Module (requires APIM to exist)
 module "monitoring_alerts" {
   source = "./modules/monitoring-alerts"
 
-  project_name          = var.project_name
-  environment           = var.environment
-  location              = var.location
-  resource_group_name   = module.resource_group.name
-  apim_id               = module.api_management.id
+  project_name            = var.project_name
+  environment             = var.environment
+  location                = var.location
+  resource_group_name     = module.resource_group.name
+  apim_id                 = module.api_management.id
   application_insights_id = module.monitoring.application_insights_id
-  action_group_id       = module.monitoring.action_group_id
-  tags                  = local.common_tags
+  action_group_id         = module.monitoring.action_group_id
+  tags                    = local.common_tags
 
   depends_on = [module.api_management, module.monitoring]
 }

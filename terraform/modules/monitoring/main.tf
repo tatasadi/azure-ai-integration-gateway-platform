@@ -6,6 +6,10 @@ resource "azurerm_log_analytics_workspace" "main" {
   sku                 = "PerGB2018"
   retention_in_days   = 90
   tags                = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }
 
 # Application Insights
@@ -17,6 +21,10 @@ resource "azurerm_application_insights" "main" {
   application_type    = "web"
   retention_in_days   = 90
   tags                = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 }
 
 # Azure Monitor Action Group (for alerts)
@@ -25,6 +33,10 @@ resource "azurerm_monitor_action_group" "main" {
   resource_group_name = var.resource_group_name
   short_name          = "aigateway"
   tags                = var.tags
+
+  lifecycle {
+    ignore_changes = [tags["CreatedDate"]]
+  }
 
   email_receiver {
     name                    = "platform-team"

@@ -96,22 +96,19 @@ TERRAFORM_DIR="$SCRIPT_DIR/../terraform"
 cd "$TERRAFORM_DIR"
 log_info "Working directory: $(pwd)"
 
-# Check if terraform.tfvars exists
-if [ ! -f "terraform.tfvars" ]; then
-    log_warning "terraform.tfvars not found. Copying from terraform.tfvars.example"
-    if [ -f "terraform.tfvars.example" ]; then
-        cp terraform.tfvars.example terraform.tfvars
-        log_warning "Please edit terraform.tfvars with your configuration before continuing"
-        exit 1
-    else
-        log_error "terraform.tfvars.example not found"
-        exit 1
-    fi
+# Check if environment-specific tfvars file exists
+ENV_TFVARS="environments/$ENVIRONMENT/terraform.tfvars"
+if [ ! -f "$ENV_TFVARS" ]; then
+    log_error "Environment-specific tfvars file not found: $ENV_TFVARS"
+    log_info "Please ensure the file exists or create it from terraform.tfvars.example"
+    exit 1
 fi
 
-# Terraform Init
-log_info "Initializing Terraform..."
-terraform init -upgrade
+log_info "Using environment-specific variables from: $ENV_TFVARS"
+
+# Terraform Init with environment-specific backend
+log_info "Initializing Terraform with backend configuration for $ENVIRONMENT..."
+terraform init -upgrade -backend-config="key=azure-ai-integration-$ENVIRONMENT.tfstate" -reconfigure
 
 # Terraform Validate
 log_info "Validating Terraform configuration..."
@@ -132,7 +129,7 @@ fi
 
 # Terraform Plan
 log_info "Creating Terraform plan..."
-terraform plan -var="environment=$ENVIRONMENT" -out="tfplan-$ENVIRONMENT"
+terraform plan -var-file="$ENV_TFVARS" -out="tfplan-$ENVIRONMENT"
 
 if [ $? -ne 0 ]; then
     log_error "Terraform plan failed"
