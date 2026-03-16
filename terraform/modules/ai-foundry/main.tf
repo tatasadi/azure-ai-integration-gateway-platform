@@ -14,11 +14,6 @@ resource "azurerm_cognitive_account" "openai" {
     identity_ids = [var.managed_identity_id]
   }
 
-  network_acls {
-    default_action = "Deny"
-    bypass         = "AzureServices"
-  }
-
   tags = var.tags
 
   lifecycle {
