@@ -45,7 +45,7 @@ resource "azurerm_api_management_backend" "azure_openai" {
   name                = "azure-openai-backend"
   resource_group_name = var.resource_group_name
   api_management_name = azurerm_api_management.main.name
-  protocol            = "http"
+  protocol            = "https"
   url                 = var.ai_foundry_endpoint
 }
 

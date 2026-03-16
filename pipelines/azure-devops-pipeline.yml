@@ -31,6 +31,12 @@ variables:
     value: '$(System.DefaultWorkingDirectory)/terraform'
   - name: azureServiceConnection
     value: 'Azure-ServiceConnection'
+  - name: backendResourceGroup
+    value: 'rg-terraform'
+  - name: backendStorageAccount
+    value: 'sttfstateta'
+  - name: backendContainer
+    value: 'tfstate'
 
 stages:
   # ============================================
@@ -42,38 +48,54 @@ stages:
       - job: ValidateTerraform
         displayName: 'Validate Terraform'
         steps:
-          - task: TerraformInstaller@0
+          - task: TerraformInstaller@1
             displayName: 'Install Terraform'
             inputs:
               terraformVersion: $(terraformVersion)
 
-          - task: TerraformTaskV2@2
+          - task: AzureCLI@2
             displayName: 'Terraform Init'
             inputs:
-              provider: 'azurerm'
-              command: 'init'
-              workingDirectory: $(workingDirectory)
-              backendServiceArm: $(azureServiceConnection)
-              backendAzureRmResourceGroupName: 'rg-terraform'
-              backendAzureRmStorageAccountName: 'sttfstateta'
-              backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'azure-ai-integration-dev.tfstate'
-              commandOptions: '-backend=false'
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              addSpnToEnvironment: true
+              inlineScript: |
+                set -euo pipefail
+                cd $(workingDirectory)
 
-          - task: TerraformTaskV2@2
+                # Configure Terraform to use OIDC/Workload Identity Federation
+                export ARM_CLIENT_ID="$servicePrincipalId"
+                export ARM_TENANT_ID="$tenantId"
+                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                export ARM_USE_OIDC=true
+                export ARM_OIDC_TOKEN="$idToken"
+
+                terraform init -backend=false
+              workingDirectory: $(workingDirectory)
+            env:
+              ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
+
+          - task: Bash@3
             displayName: 'Terraform Validate'
             inputs:
-              provider: 'azurerm'
-              command: 'validate'
+              targetType: 'inline'
+              script: |
+                cd $(workingDirectory)
+                terraform validate
               workingDirectory: $(workingDirectory)
 
-          - task: TerraformTaskV2@2
+          - task: Bash@3
             displayName: 'Terraform Format Check'
             inputs:
-              provider: 'azurerm'
-              command: 'custom'
-              customCommand: 'fmt'
-              commandOptions: '-check -recursive'
+              targetType: 'inline'
+              script: |
+                cd $(workingDirectory)
+                terraform fmt -check -recursive
+                if [ $? -ne 0 ]; then
+                  echo "##[error]Terraform files are not properly formatted. Run 'terraform fmt -recursive' locally."
+                  exit 1
+                fi
               workingDirectory: $(workingDirectory)
             continueOnError: true
 
@@ -112,9 +134,14 @@ stages:
           - script: |
               echo "Running security scan with Checkov..."
               pip install checkov
-              # CKV_AZURE_109: Ensure that key vault allows firewall rules settings (conflicts with internal-only access pattern)
-              # CKV_AZURE_110: Ensure that key vault enables purge protection (may conflict with dev/test environments)
-              checkov -d terraform/ --skip-check CKV_AZURE_109,CKV_AZURE_110 --compact --quiet
+              # CKV_AZURE_107: APIM VNet integration requires Premium SKU (cost consideration)
+              # CKV_AZURE_134: Cognitive Services public access needed for APIM connectivity (no VNet)
+              # CKV_AZURE_174: APIM public access needed for external clients (by design)
+              # CKV_AZURE_189: Key Vault public access needed (no private endpoint infrastructure)
+              # CKV_AZURE_247: Cognitive Services DLP requires additional configuration
+              # CKV2_AZURE_22: Customer-managed keys require Key Vault integration (future enhancement)
+              # CKV2_AZURE_32: Private endpoints require VNet infrastructure (future enhancement)
+              checkov -d terraform/ --skip-check CKV_AZURE_107,CKV_AZURE_134,CKV_AZURE_174,CKV_AZURE_189,CKV_AZURE_247,CKV2_AZURE_22,CKV2_AZURE_32 --compact --quiet
             displayName: 'Run Checkov Security Scan'
             continueOnError: true
 
@@ -127,35 +154,75 @@ stages:
     condition: succeeded()
     variables:
       - group: ai-gateway-dev
+      - name: backendKey
+        value: 'azure-ai-integration-dev.tfstate'
     jobs:
       - job: TerraformPlan
         displayName: 'Terraform Plan Dev'
         steps:
-          - task: TerraformInstaller@0
+          - task: TerraformInstaller@1
             displayName: 'Install Terraform'
             inputs:
               terraformVersion: $(terraformVersion)
 
-          - task: TerraformTaskV2@2
+          - task: AzureCLI@2
             displayName: 'Terraform Init'
             inputs:
-              provider: 'azurerm'
-              command: 'init'
-              workingDirectory: $(workingDirectory)
-              backendServiceArm: $(azureServiceConnection)
-              backendAzureRmResourceGroupName: 'rg-terraform'
-              backendAzureRmStorageAccountName: 'sttfstateta'
-              backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'azure-ai-integration-dev.tfstate'
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              addSpnToEnvironment: true
+              inlineScript: |
+                set -euo pipefail
+                cd $(workingDirectory)
 
-          - task: TerraformTaskV2@2
+                # Configure Terraform to use OIDC/Workload Identity Federation
+                export ARM_CLIENT_ID="$servicePrincipalId"
+                export ARM_TENANT_ID="$tenantId"
+                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                export ARM_USE_OIDC=true
+                export ARM_OIDC_TOKEN="$idToken"
+
+                terraform init \
+                  -backend-config="resource_group_name=$(backendResourceGroup)" \
+                  -backend-config="storage_account_name=$(backendStorageAccount)" \
+                  -backend-config="container_name=$(backendContainer)" \
+                  -backend-config="key=$(backendKey)"
+              workingDirectory: $(workingDirectory)
+            env:
+              ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
+
+          - task: AzureCLI@2
             displayName: 'Terraform Plan'
             inputs:
-              provider: 'azurerm'
-              command: 'plan'
-              commandOptions: '-var="project_name=$(PROJECT_NAME)" -var="environment=$(ENVIRONMENT)" -var="location=$(LOCATION)" -var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" -var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" -var="apim_sku_name=$(APIM_SKU_NAME)" -var="enable_gpt4o=$(ENABLE_GPT4O)" -var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" -out=tfplan-dev'
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              addSpnToEnvironment: true
+              inlineScript: |
+                set -euo pipefail
+                cd $(workingDirectory)
+
+                # Configure Terraform to use OIDC/Workload Identity Federation
+                export ARM_CLIENT_ID="$servicePrincipalId"
+                export ARM_TENANT_ID="$tenantId"
+                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                export ARM_USE_OIDC=true
+                export ARM_OIDC_TOKEN="$idToken"
+
+                terraform plan \
+                  -var="project_name=$(PROJECT_NAME)" \
+                  -var="environment=$(ENVIRONMENT)" \
+                  -var="location=$(LOCATION)" \
+                  -var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" \
+                  -var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" \
+                  -var="apim_sku_name=$(APIM_SKU_NAME)" \
+                  -var="enable_gpt4o=$(ENABLE_GPT4O)" \
+                  -var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" \
+                  -out=tfplan-dev
               workingDirectory: $(workingDirectory)
-              environmentServiceNameAzureRM: $(azureServiceConnection)
+            env:
+              ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
 
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Plan Artifact'
@@ -214,6 +281,8 @@ stages:
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     variables:
       - group: ai-gateway-dev
+      - name: backendKey
+        value: 'azure-ai-integration-dev.tfstate'
     jobs:
       - deployment: DeployInfrastructure
         displayName: 'Deploy Infrastructure'
@@ -222,7 +291,9 @@ stages:
           runOnce:
             deploy:
               steps:
-                - task: TerraformInstaller@0
+                - checkout: self
+
+                - task: TerraformInstaller@1
                   displayName: 'Install Terraform'
                   inputs:
                     terraformVersion: $(terraformVersion)
@@ -233,26 +304,55 @@ stages:
                     artifactName: 'tfplan-dev'
                     targetPath: '$(System.DefaultWorkingDirectory)/terraform'
 
-                - task: TerraformTaskV2@2
+                - task: AzureCLI@2
                   displayName: 'Terraform Init'
                   inputs:
-                    provider: 'azurerm'
-                    command: 'init'
-                    workingDirectory: $(workingDirectory)
-                    backendServiceArm: $(azureServiceConnection)
-                    backendAzureRmResourceGroupName: 'rg-terraform'
-                    backendAzureRmStorageAccountName: 'sttfstateta'
-                    backendAzureRmContainerName: 'tfstate'
-                    backendAzureRmKey: 'azure-ai-integration-dev.tfstate'
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    addSpnToEnvironment: true
+                    inlineScript: |
+                      set -euo pipefail
+                      cd $(workingDirectory)
 
-                - task: TerraformTaskV2@2
+                      # Configure Terraform to use OIDC/Workload Identity Federation
+                      export ARM_CLIENT_ID="$servicePrincipalId"
+                      export ARM_TENANT_ID="$tenantId"
+                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                      export ARM_USE_OIDC=true
+                      export ARM_OIDC_TOKEN="$idToken"
+
+                      terraform init \
+                        -backend-config="resource_group_name=$(backendResourceGroup)" \
+                        -backend-config="storage_account_name=$(backendStorageAccount)" \
+                        -backend-config="container_name=$(backendContainer)" \
+                        -backend-config="key=$(backendKey)"
+                    workingDirectory: $(workingDirectory)
+                  env:
+                    ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
+
+                - task: AzureCLI@2
                   displayName: 'Terraform Apply'
                   inputs:
-                    provider: 'azurerm'
-                    command: 'apply'
-                    commandOptions: 'tfplan-dev'
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    addSpnToEnvironment: true
+                    inlineScript: |
+                      set -euo pipefail
+                      cd $(workingDirectory)
+
+                      # Configure Terraform to use OIDC/Workload Identity Federation
+                      export ARM_CLIENT_ID="$servicePrincipalId"
+                      export ARM_TENANT_ID="$tenantId"
+                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                      export ARM_USE_OIDC=true
+                      export ARM_OIDC_TOKEN="$idToken"
+
+                      terraform apply -auto-approve tfplan-dev
                     workingDirectory: $(workingDirectory)
-                    environmentServiceNameAzureRM: $(azureServiceConnection)
+                  env:
+                    ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
 
                 - task: Bash@3
                   displayName: 'Extract Terraform Outputs'
@@ -288,35 +388,75 @@ stages:
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     variables:
       - group: ai-gateway-staging
+      - name: backendKey
+        value: 'azure-ai-integration-staging.tfstate'
     jobs:
       - job: TerraformPlan
         displayName: 'Terraform Plan Staging'
         steps:
-          - task: TerraformInstaller@0
+          - task: TerraformInstaller@1
             displayName: 'Install Terraform'
             inputs:
               terraformVersion: $(terraformVersion)
 
-          - task: TerraformTaskV2@2
+          - task: AzureCLI@2
             displayName: 'Terraform Init'
             inputs:
-              provider: 'azurerm'
-              command: 'init'
-              workingDirectory: $(workingDirectory)
-              backendServiceArm: $(azureServiceConnection)
-              backendAzureRmResourceGroupName: 'rg-terraform'
-              backendAzureRmStorageAccountName: 'sttfstateta'
-              backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'azure-ai-integration-staging.tfstate'
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              addSpnToEnvironment: true
+              inlineScript: |
+                set -euo pipefail
+                cd $(workingDirectory)
 
-          - task: TerraformTaskV2@2
+                # Configure Terraform to use OIDC/Workload Identity Federation
+                export ARM_CLIENT_ID="$servicePrincipalId"
+                export ARM_TENANT_ID="$tenantId"
+                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                export ARM_USE_OIDC=true
+                export ARM_OIDC_TOKEN="$idToken"
+
+                terraform init \
+                  -backend-config="resource_group_name=$(backendResourceGroup)" \
+                  -backend-config="storage_account_name=$(backendStorageAccount)" \
+                  -backend-config="container_name=$(backendContainer)" \
+                  -backend-config="key=$(backendKey)"
+              workingDirectory: $(workingDirectory)
+            env:
+              ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
+
+          - task: AzureCLI@2
             displayName: 'Terraform Plan'
             inputs:
-              provider: 'azurerm'
-              command: 'plan'
-              commandOptions: '-var="project_name=$(PROJECT_NAME)" -var="environment=$(ENVIRONMENT)" -var="location=$(LOCATION)" -var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" -var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" -var="apim_sku_name=$(APIM_SKU_NAME)" -var="enable_gpt4o=$(ENABLE_GPT4O)" -var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" -out=tfplan-staging'
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              addSpnToEnvironment: true
+              inlineScript: |
+                set -euo pipefail
+                cd $(workingDirectory)
+
+                # Configure Terraform to use OIDC/Workload Identity Federation
+                export ARM_CLIENT_ID="$servicePrincipalId"
+                export ARM_TENANT_ID="$tenantId"
+                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                export ARM_USE_OIDC=true
+                export ARM_OIDC_TOKEN="$idToken"
+
+                terraform plan \
+                  -var="project_name=$(PROJECT_NAME)" \
+                  -var="environment=$(ENVIRONMENT)" \
+                  -var="location=$(LOCATION)" \
+                  -var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" \
+                  -var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" \
+                  -var="apim_sku_name=$(APIM_SKU_NAME)" \
+                  -var="enable_gpt4o=$(ENABLE_GPT4O)" \
+                  -var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" \
+                  -out=tfplan-staging
               workingDirectory: $(workingDirectory)
-              environmentServiceNameAzureRM: $(azureServiceConnection)
+            env:
+              ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
 
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Plan Artifact'
@@ -375,6 +515,8 @@ stages:
     condition: succeeded()
     variables:
       - group: ai-gateway-staging
+      - name: backendKey
+        value: 'azure-ai-integration-staging.tfstate'
     jobs:
       - deployment: DeployInfrastructure
         displayName: 'Deploy Infrastructure'
@@ -383,7 +525,9 @@ stages:
           runOnce:
             deploy:
               steps:
-                - task: TerraformInstaller@0
+                - checkout: self
+
+                - task: TerraformInstaller@1
                   displayName: 'Install Terraform'
                   inputs:
                     terraformVersion: $(terraformVersion)
@@ -394,26 +538,55 @@ stages:
                     artifactName: 'tfplan-staging'
                     targetPath: '$(System.DefaultWorkingDirectory)/terraform'
 
-                - task: TerraformTaskV2@2
+                - task: AzureCLI@2
                   displayName: 'Terraform Init'
                   inputs:
-                    provider: 'azurerm'
-                    command: 'init'
-                    workingDirectory: $(workingDirectory)
-                    backendServiceArm: $(azureServiceConnection)
-                    backendAzureRmResourceGroupName: 'rg-terraform'
-                    backendAzureRmStorageAccountName: 'sttfstateta'
-                    backendAzureRmContainerName: 'tfstate'
-                    backendAzureRmKey: 'azure-ai-integration-staging.tfstate'
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    addSpnToEnvironment: true
+                    inlineScript: |
+                      set -euo pipefail
+                      cd $(workingDirectory)
 
-                - task: TerraformTaskV2@2
+                      # Configure Terraform to use OIDC/Workload Identity Federation
+                      export ARM_CLIENT_ID="$servicePrincipalId"
+                      export ARM_TENANT_ID="$tenantId"
+                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                      export ARM_USE_OIDC=true
+                      export ARM_OIDC_TOKEN="$idToken"
+
+                      terraform init \
+                        -backend-config="resource_group_name=$(backendResourceGroup)" \
+                        -backend-config="storage_account_name=$(backendStorageAccount)" \
+                        -backend-config="container_name=$(backendContainer)" \
+                        -backend-config="key=$(backendKey)"
+                    workingDirectory: $(workingDirectory)
+                  env:
+                    ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
+
+                - task: AzureCLI@2
                   displayName: 'Terraform Apply'
                   inputs:
-                    provider: 'azurerm'
-                    command: 'apply'
-                    commandOptions: 'tfplan-staging'
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    addSpnToEnvironment: true
+                    inlineScript: |
+                      set -euo pipefail
+                      cd $(workingDirectory)
+
+                      # Configure Terraform to use OIDC/Workload Identity Federation
+                      export ARM_CLIENT_ID="$servicePrincipalId"
+                      export ARM_TENANT_ID="$tenantId"
+                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                      export ARM_USE_OIDC=true
+                      export ARM_OIDC_TOKEN="$idToken"
+
+                      terraform apply -auto-approve tfplan-staging
                     workingDirectory: $(workingDirectory)
-                    environmentServiceNameAzureRM: $(azureServiceConnection)
+                  env:
+                    ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
 
                 - task: Bash@3
                   displayName: 'Extract Terraform Outputs'
@@ -458,35 +631,75 @@ stages:
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     variables:
       - group: ai-gateway-prod
+      - name: backendKey
+        value: 'azure-ai-integration-prod.tfstate'
     jobs:
       - job: TerraformPlan
         displayName: 'Terraform Plan Production'
         steps:
-          - task: TerraformInstaller@0
+          - task: TerraformInstaller@1
             displayName: 'Install Terraform'
             inputs:
               terraformVersion: $(terraformVersion)
 
-          - task: TerraformTaskV2@2
+          - task: AzureCLI@2
             displayName: 'Terraform Init'
             inputs:
-              provider: 'azurerm'
-              command: 'init'
-              workingDirectory: $(workingDirectory)
-              backendServiceArm: $(azureServiceConnection)
-              backendAzureRmResourceGroupName: 'rg-terraform'
-              backendAzureRmStorageAccountName: 'sttfstateta'
-              backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'azure-ai-integration-prod.tfstate'
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              addSpnToEnvironment: true
+              inlineScript: |
+                set -euo pipefail
+                cd $(workingDirectory)
 
-          - task: TerraformTaskV2@2
+                # Configure Terraform to use OIDC/Workload Identity Federation
+                export ARM_CLIENT_ID="$servicePrincipalId"
+                export ARM_TENANT_ID="$tenantId"
+                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                export ARM_USE_OIDC=true
+                export ARM_OIDC_TOKEN="$idToken"
+
+                terraform init \
+                  -backend-config="resource_group_name=$(backendResourceGroup)" \
+                  -backend-config="storage_account_name=$(backendStorageAccount)" \
+                  -backend-config="container_name=$(backendContainer)" \
+                  -backend-config="key=$(backendKey)"
+              workingDirectory: $(workingDirectory)
+            env:
+              ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
+
+          - task: AzureCLI@2
             displayName: 'Terraform Plan'
             inputs:
-              provider: 'azurerm'
-              command: 'plan'
-              commandOptions: '-var="project_name=$(PROJECT_NAME)" -var="environment=$(ENVIRONMENT)" -var="location=$(LOCATION)" -var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" -var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" -var="apim_sku_name=$(APIM_SKU_NAME)" -var="enable_gpt4o=$(ENABLE_GPT4O)" -var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" -out=tfplan-prod'
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              addSpnToEnvironment: true
+              inlineScript: |
+                set -euo pipefail
+                cd $(workingDirectory)
+
+                # Configure Terraform to use OIDC/Workload Identity Federation
+                export ARM_CLIENT_ID="$servicePrincipalId"
+                export ARM_TENANT_ID="$tenantId"
+                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                export ARM_USE_OIDC=true
+                export ARM_OIDC_TOKEN="$idToken"
+
+                terraform plan \
+                  -var="project_name=$(PROJECT_NAME)" \
+                  -var="environment=$(ENVIRONMENT)" \
+                  -var="location=$(LOCATION)" \
+                  -var="apim_publisher_name=$(APIM_PUBLISHER_NAME)" \
+                  -var="apim_publisher_email=$(APIM_PUBLISHER_EMAIL)" \
+                  -var="apim_sku_name=$(APIM_SKU_NAME)" \
+                  -var="enable_gpt4o=$(ENABLE_GPT4O)" \
+                  -var="enable_gpt35_turbo=$(ENABLE_GPT35_TURBO)" \
+                  -out=tfplan-prod
               workingDirectory: $(workingDirectory)
-              environmentServiceNameAzureRM: $(azureServiceConnection)
+            env:
+              ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
 
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Plan Artifact'
@@ -545,6 +758,8 @@ stages:
     condition: succeeded()
     variables:
       - group: ai-gateway-prod
+      - name: backendKey
+        value: 'azure-ai-integration-prod.tfstate'
     jobs:
       - deployment: DeployInfrastructure
         displayName: 'Deploy Infrastructure'
@@ -553,7 +768,9 @@ stages:
           runOnce:
             deploy:
               steps:
-                - task: TerraformInstaller@0
+                - checkout: self
+
+                - task: TerraformInstaller@1
                   displayName: 'Install Terraform'
                   inputs:
                     terraformVersion: $(terraformVersion)
@@ -564,26 +781,55 @@ stages:
                     artifactName: 'tfplan-prod'
                     targetPath: '$(System.DefaultWorkingDirectory)/terraform'
 
-                - task: TerraformTaskV2@2
+                - task: AzureCLI@2
                   displayName: 'Terraform Init'
                   inputs:
-                    provider: 'azurerm'
-                    command: 'init'
-                    workingDirectory: $(workingDirectory)
-                    backendServiceArm: $(azureServiceConnection)
-                    backendAzureRmResourceGroupName: 'rg-terraform'
-                    backendAzureRmStorageAccountName: 'sttfstateta'
-                    backendAzureRmContainerName: 'tfstate'
-                    backendAzureRmKey: 'azure-ai-integration-prod.tfstate'
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    addSpnToEnvironment: true
+                    inlineScript: |
+                      set -euo pipefail
+                      cd $(workingDirectory)
 
-                - task: TerraformTaskV2@2
+                      # Configure Terraform to use OIDC/Workload Identity Federation
+                      export ARM_CLIENT_ID="$servicePrincipalId"
+                      export ARM_TENANT_ID="$tenantId"
+                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                      export ARM_USE_OIDC=true
+                      export ARM_OIDC_TOKEN="$idToken"
+
+                      terraform init \
+                        -backend-config="resource_group_name=$(backendResourceGroup)" \
+                        -backend-config="storage_account_name=$(backendStorageAccount)" \
+                        -backend-config="container_name=$(backendContainer)" \
+                        -backend-config="key=$(backendKey)"
+                    workingDirectory: $(workingDirectory)
+                  env:
+                    ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
+
+                - task: AzureCLI@2
                   displayName: 'Terraform Apply'
                   inputs:
-                    provider: 'azurerm'
-                    command: 'apply'
-                    commandOptions: 'tfplan-prod'
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    addSpnToEnvironment: true
+                    inlineScript: |
+                      set -euo pipefail
+                      cd $(workingDirectory)
+
+                      # Configure Terraform to use OIDC/Workload Identity Federation
+                      export ARM_CLIENT_ID="$servicePrincipalId"
+                      export ARM_TENANT_ID="$tenantId"
+                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                      export ARM_USE_OIDC=true
+                      export ARM_OIDC_TOKEN="$idToken"
+
+                      terraform apply -auto-approve tfplan-prod
                     workingDirectory: $(workingDirectory)
-                    environmentServiceNameAzureRM: $(azureServiceConnection)
+                  env:
+                    ARM_OIDC_REQUEST_TOKEN: $(System.AccessToken)
 
                 - task: Bash@3
                   displayName: 'Extract Terraform Outputs'

@@ -1,14 +1,22 @@
 # Azure Cognitive Services Account (Azure OpenAI)
 resource "azurerm_cognitive_account" "openai" {
-  name                = "cog-${var.project_name}-${var.environment}-${var.location}"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  kind                = "OpenAI"
-  sku_name            = "S0"
+  name                          = "cog-${var.project_name}-${var.environment}-${var.location}"
+  location                      = var.location
+  resource_group_name           = var.resource_group_name
+  kind                          = "OpenAI"
+  sku_name                      = "S0"
+  local_auth_enabled            = false
+  public_network_access_enabled = true
+  custom_subdomain_name         = "cog-${var.project_name}-${var.environment}-${var.location}"
 
   identity {
     type         = "SystemAssigned, UserAssigned"
     identity_ids = [var.managed_identity_id]
+  }
+
+  network_acls {
+    default_action = "Deny"
+    bypass         = "AzureServices"
   }
 
   tags = var.tags
