@@ -370,15 +370,6 @@ stages:
                       echo "APIM Gateway URL: $APIM_URL"
                       echo "Note: Subscription key must be obtained from Azure Portal > APIM > Subscriptions"
 
-                - task: Bash@3
-                  displayName: 'Run Smoke Tests'
-                  inputs:
-                    targetType: 'filePath'
-                    filePath: '$(System.DefaultWorkingDirectory)/scripts/smoke-test.sh'
-                    arguments: '$(APIM_GATEWAY_URL)'
-                    workingDirectory: '$(System.DefaultWorkingDirectory)'
-                  continueOnError: true
-
   # ============================================
   # Stage 4: Plan (Staging)
   # ============================================

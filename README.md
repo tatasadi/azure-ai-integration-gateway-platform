@@ -46,8 +46,13 @@ See [docs/api-design.md](docs/api-design.md) for complete API documentation.
 - Rate limiting (100 requests/minute)
 - Daily quotas (10,000 requests/day)
 - Managed Identity for service-to-service authentication
+- TLS 1.2+ enforcement with certificate validation
 - No hardcoded credentials
 - Azure Key Vault integration
+- Resource locks on production resources
+- Comprehensive audit logging
+
+See [docs/security.md](docs/security.md) and [docs/rbac.md](docs/rbac.md) for detailed security documentation.
 
 ### Observability
 
@@ -156,7 +161,10 @@ curl -X POST \
 azure-ai-integration-gateway-platform/
 ├── docs/                           # Documentation
 │   ├── architecture.md             # Architecture details
-│   └── api-design.md               # API specifications
+│   ├── api-design.md               # API specifications
+│   ├── security.md                 # Security guide
+│   ├── rbac.md                     # RBAC documentation
+│   └── observability.md            # Monitoring guide
 ├── terraform/                      # Infrastructure as Code
 │   ├── modules/                    # Terraform modules
 │   │   ├── resource-group/         # Resource group module
@@ -332,6 +340,10 @@ See [pipelines/azure-devops-pipeline.yml](pipelines/azure-devops-pipeline.yml)
 4. **Monitor access**: Enable audit logging
 5. **Rotate keys**: Regular key rotation policy
 6. **Review policies**: Regular security reviews
+7. **TLS 1.2+ only**: Legacy protocols disabled
+8. **Resource locks**: Production resources protected from deletion
+
+See [docs/security.md](docs/security.md) for comprehensive security guide and incident response procedures.
 
 ## Troubleshooting
 
@@ -363,8 +375,9 @@ Wait for the rate limit window to reset (60 seconds) or request quota increase.
 
 1. Check [docs/architecture.md](docs/architecture.md) for architecture details
 2. Review [docs/api-design.md](docs/api-design.md) for API specifications
-3. Check Application Insights logs for detailed error information
-4. Open an issue in the repository
+3. Review [docs/security.md](docs/security.md) for security issues
+4. Check Application Insights logs for detailed error information
+5. Open an issue in the repository
 
 ## Contributing
 
@@ -388,6 +401,6 @@ This project is licensed under the MIT License
 
 ---
 
-**Version**: 1.0.0
-**Last Updated**: 2026-03-11
+**Version**: 1.1.0
+**Last Updated**: 2026-03-16
 
