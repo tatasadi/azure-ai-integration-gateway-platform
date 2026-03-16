@@ -26,7 +26,7 @@ pool:
 variables:
   - group: ai-gateway-common
   - name: terraformVersion
-    value: '1.5.0'
+    value: '1.7.5'
   - name: workingDirectory
     value: '$(System.DefaultWorkingDirectory)/terraform'
   - name: azureServiceConnection
