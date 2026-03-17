@@ -1,0 +1,639 @@
+openapi: 3.0.3
+info:
+  title: Azure AI Integration Gateway API
+  description: |
+    Enterprise-grade AI Gateway providing centralized governance, security, rate limiting, and observability for AI services.
+
+    ## Features
+    - **Text Summarization**: Condense long text into concise summaries
+    - **Information Extraction**: Extract structured data from unstructured text
+    - **Health Monitoring**: Check API and backend service health
+
+    ## Authentication
+    All requests require a subscription key in the `Ocp-Apim-Subscription-Key` header.
+
+    ## Rate Limits
+    - **Rate Limit**: 100 requests per minute per subscription
+    - **Daily Quota**: 10,000 requests per day per subscription
+
+    ## Support
+    - Documentation: https://docs.ai-gateway.example.com
+    - Support Email: api-support@example.com
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: api-support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://apim-aigateway-dev-eastus-01.azure-api.net
+    description: Development environment
+  - url: https://apim-aigateway-staging-eastus-01.azure-api.net
+    description: Staging environment
+  - url: https://apim-aigateway-prod-eastus-01.azure-api.net
+    description: Production environment
+
+security:
+  - SubscriptionKey: []
+
+tags:
+  - name: AI Operations
+    description: AI-powered text processing operations
+  - name: Health
+    description: Service health and monitoring endpoints
+
+paths:
+  /ai/summarize:
+    post:
+      tags:
+        - AI Operations
+      summary: Summarize text
+      description: |
+        Summarizes long text into concise summaries using advanced AI models (GPT-4o).
+
+        **Model Used**: GPT-4o (128K context window)
+
+        **Use Cases**:
+        - Article summarization
+        - Document condensation
+        - Meeting notes summarization
+      operationId: summarize
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummarizeRequest'
+            examples:
+              basic:
+                summary: Basic summarization request
+                value:
+                  text: "The global economy showed signs of recovery in 2026 as technology sectors led growth across major markets. Artificial intelligence continued to drive innovation in healthcare, finance, and manufacturing."
+                  style: "concise"
+              detailed:
+                summary: Detailed summary with custom length
+                value:
+                  text: "Long article text here..."
+                  max_length: 1000
+                  style: "detailed"
+      responses:
+        '200':
+          description: Successful summarization
+          headers:
+            X-Request-Id:
+              description: Unique request identifier for tracking
+              schema:
+                type: string
+                format: uuid
+            X-Token-Usage:
+              description: Number of tokens consumed by this request
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              description: Remaining requests in current rate limit period
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              description: Unix timestamp when rate limit resets
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummarizeResponse'
+              examples:
+                success:
+                  summary: Successful summarization
+                  value:
+                    summary: "Global economy recovers in 2026, driven by AI innovation in key sectors."
+                    tokens_used: 156
+                    request_id: "a1b2c3d4-e5f6-4789-0123-456789abcdef"
+                    model: "gpt-4o"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /ai/extract:
+    post:
+      tags:
+        - AI Operations
+      summary: Extract structured information
+      description: |
+        Extracts structured information from unstructured text using AI.
+
+        **Model Used**: GPT-4o (advanced reasoning capabilities)
+
+        **Use Cases**:
+        - Invoice data extraction
+        - Form parsing
+        - Entity recognition
+        - Document processing
+      operationId: extract
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtractRequest'
+            examples:
+              invoice:
+                summary: Extract invoice data
+                value:
+                  text: "INVOICE #12345\nDate: March 11, 2026\nBill To: Acme Corp\nTotal Amount: $2,450.00"
+                  schema:
+                    type: object
+                    properties:
+                      invoice_number:
+                        type: string
+                      invoice_date:
+                        type: string
+                        format: date
+                      customer:
+                        type: string
+                      total:
+                        type: number
+      responses:
+        '200':
+          description: Successful extraction
+          headers:
+            X-Request-Id:
+              description: Unique request identifier for tracking
+              schema:
+                type: string
+                format: uuid
+            X-Token-Usage:
+              description: Number of tokens consumed by this request
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractResponse'
+              examples:
+                success:
+                  summary: Successful extraction
+                  value:
+                    extracted_data:
+                      invoice_number: "12345"
+                      invoice_date: "2026-03-11"
+                      customer: "Acme Corp"
+                      total: 2450.00
+                    confidence: 0.98
+                    tokens_used: 234
+                    request_id: "b2c3d4e5-f6a7-4890-1234-567890bcdefg"
+                    model: "gpt-4o"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /ai/health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: |
+        Verifies that the API gateway and backend services are operational.
+
+        **Services Checked**:
+        - API Gateway (APIM)
+        - Azure AI Foundry (OpenAI)
+        - Key Vault (if applicable)
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                healthy:
+                  summary: All services healthy
+                  value:
+                    status: "healthy"
+                    timestamp: "2026-03-17T10:30:00Z"
+                    services:
+                      api_gateway: "healthy"
+                      ai_foundry: "healthy"
+                      key_vault: "healthy"
+                    version: "1.0.0"
+        '503':
+          description: Service is unhealthy or degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                degraded:
+                  summary: Backend service degraded
+                  value:
+                    status: "degraded"
+                    timestamp: "2026-03-17T10:30:00Z"
+                    services:
+                      api_gateway: "healthy"
+                      ai_foundry: "unhealthy"
+                      key_vault: "healthy"
+                    version: "1.0.0"
+
+components:
+  securitySchemes:
+    SubscriptionKey:
+      type: apiKey
+      in: header
+      name: Ocp-Apim-Subscription-Key
+      description: |
+        Subscription key for API authentication.
+
+        **How to obtain**:
+        1. Contact platform team to request access
+        2. Receive subscription key via secure channel
+        3. Store in Azure Key Vault or secure environment variables
+
+        **Security**:
+        - Never commit keys to source control
+        - Rotate keys every 90 days
+        - Use separate keys for each environment
+
+  schemas:
+    SummarizeRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 10
+          maxLength: 400000
+          description: The text to summarize
+          example: "Long article text that needs to be summarized..."
+        max_length:
+          type: integer
+          minimum: 50
+          maximum: 5000
+          default: 500
+          description: Maximum length of summary in tokens
+          example: 500
+        style:
+          type: string
+          enum:
+            - concise
+            - detailed
+            - bullet_points
+          default: concise
+          description: |
+            Summary style preference:
+            - **concise**: Brief, single-paragraph summary
+            - **detailed**: More comprehensive summary with key points
+            - **bullet_points**: Summary formatted as bullet points
+          example: "concise"
+
+    SummarizeResponse:
+      type: object
+      required:
+        - summary
+        - tokens_used
+        - request_id
+        - model
+      properties:
+        summary:
+          type: string
+          description: The summarized text
+          example: "This article discusses recent advances in AI technology and their impact on various industries."
+        tokens_used:
+          type: integer
+          description: Total tokens consumed (input + output)
+          example: 1234
+        request_id:
+          type: string
+          format: uuid
+          description: Unique request identifier for tracking and support
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        model:
+          type: string
+          description: AI model used for summarization
+          example: "gpt-4o"
+
+    ExtractRequest:
+      type: object
+      required:
+        - text
+        - schema
+      properties:
+        text:
+          type: string
+          minLength: 10
+          maxLength: 400000
+          description: The text to extract information from
+          example: "INVOICE #12345\nDate: March 11, 2026\nTotal: $500.00"
+        schema:
+          type: object
+          description: |
+            JSON Schema describing the expected structure of extracted data.
+
+            The schema should define the fields you want to extract and their types.
+          example:
+            type: object
+            properties:
+              invoice_number:
+                type: string
+              date:
+                type: string
+                format: date
+              amount:
+                type: number
+
+    ExtractResponse:
+      type: object
+      required:
+        - extracted_data
+        - tokens_used
+        - request_id
+        - model
+      properties:
+        extracted_data:
+          type: object
+          description: Extracted structured data matching the provided schema
+          example:
+            invoice_number: "12345"
+            date: "2026-03-11"
+            amount: 500.00
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Confidence score for the extraction (0-1)
+          example: 0.95
+        tokens_used:
+          type: integer
+          description: Total tokens consumed (input + output)
+          example: 890
+        request_id:
+          type: string
+          format: uuid
+          description: Unique request identifier for tracking
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        model:
+          type: string
+          description: AI model used for extraction
+          example: "gpt-4o"
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - services
+        - version
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          description: Overall health status
+          example: "healthy"
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of health check
+          example: "2026-03-17T10:30:00Z"
+        services:
+          type: object
+          description: Health status of individual services
+          properties:
+            api_gateway:
+              type: string
+              enum:
+                - healthy
+                - unhealthy
+              example: "healthy"
+            ai_foundry:
+              type: string
+              enum:
+                - healthy
+                - unhealthy
+              example: "healthy"
+            key_vault:
+              type: string
+              enum:
+                - healthy
+                - unhealthy
+              example: "healthy"
+        version:
+          type: string
+          description: API version
+          example: "1.0.0"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Error code for programmatic handling
+              example: "InvalidRequest"
+            message:
+              type: string
+              description: Human-readable error message
+              example: "Text field is required and must be between 10 and 400,000 characters."
+            request_id:
+              type: string
+              format: uuid
+              description: Request identifier for support and troubleshooting
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            details:
+              type: object
+              description: Additional error details (optional)
+              additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Bad Request - Invalid input parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalid_text:
+              summary: Invalid text field
+              value:
+                error:
+                  code: "InvalidRequest"
+                  message: "Text field is required and must be between 10 and 400,000 characters."
+                  request_id: "550e8400-e29b-41d4-a716-446655440000"
+            missing_field:
+              summary: Missing required field
+              value:
+                error:
+                  code: "InvalidRequest"
+                  message: "Missing required field: text"
+                  request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    Unauthorized:
+      description: Unauthorized - Missing or invalid subscription key
+      headers:
+        WWW-Authenticate:
+          description: Authentication method required
+          schema:
+            type: string
+            example: "ApiKey"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missing_key:
+              summary: Missing subscription key
+              value:
+                error:
+                  code: "Unauthorized"
+                  message: "Missing or invalid subscription key."
+                  request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    TooManyRequests:
+      description: Too Many Requests - Rate limit or quota exceeded
+      headers:
+        Retry-After:
+          description: Number of seconds to wait before retrying
+          schema:
+            type: integer
+            example: 60
+        X-RateLimit-Limit:
+          description: Rate limit threshold
+          schema:
+            type: integer
+            example: 100
+        X-RateLimit-Remaining:
+          description: Remaining requests in current period
+          schema:
+            type: integer
+            example: 0
+        X-RateLimit-Reset:
+          description: Unix timestamp when rate limit resets
+          schema:
+            type: integer
+            example: 1678531200
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            rate_limit:
+              summary: Rate limit exceeded
+              value:
+                error:
+                  code: "RateLimitExceeded"
+                  message: "Rate limit exceeded. Please retry after 60 seconds."
+                  request_id: "550e8400-e29b-41d4-a716-446655440000"
+            quota_exceeded:
+              summary: Daily quota exceeded
+              value:
+                error:
+                  code: "QuotaExceeded"
+                  message: "Daily quota exceeded. Quota will be replenished in 08:32:15."
+                  request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    InternalError:
+      description: Internal Server Error - An error occurred while processing the request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            generic:
+              summary: Generic internal error
+              value:
+                error:
+                  code: "InternalError"
+                  message: "An internal error occurred. Please contact support with request ID."
+                  request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+    ServiceUnavailable:
+      description: Service Unavailable - Backend service is temporarily unavailable
+      headers:
+        Retry-After:
+          description: Number of seconds to wait before retrying
+          schema:
+            type: integer
+            example: 120
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            backend_unavailable:
+              summary: Backend service unavailable
+              value:
+                error:
+                  code: "ServiceUnavailable"
+                  message: "The backend service is temporarily unavailable. Please try again later."
+                  request_id: "550e8400-e29b-41d4-a716-446655440000"
+
+  examples:
+    SummarizeNewsArticle:
+      summary: Summarize a news article
+      description: Example of summarizing a news article about technology
+      value:
+        text: "Artificial intelligence continues to transform industries worldwide. Recent breakthroughs in large language models have enabled more sophisticated applications in healthcare, finance, and education. Companies are investing heavily in AI infrastructure and talent acquisition. Regulatory frameworks are being developed to ensure responsible AI deployment. Experts predict continued growth in AI adoption across all sectors."
+        max_length: 100
+        style: "concise"
+
+    ExtractInvoiceData:
+      summary: Extract invoice information
+      description: Example of extracting structured data from an invoice
+      value:
+        text: "INVOICE #INV-2026-001\nDate: March 17, 2026\nBill To: Tech Solutions Inc.\nItem: Cloud Services\nQuantity: 1\nUnit Price: $1,500.00\nTotal: $1,500.00\nDue Date: April 16, 2026"
+        schema:
+          type: object
+          properties:
+            invoice_number:
+              type: string
+            invoice_date:
+              type: string
+              format: date
+            customer:
+              type: string
+            total:
+              type: number
+            due_date:
+              type: string
+              format: date
+
+x-tagGroups:
+  - name: API Operations
+    tags:
+      - AI Operations
+      - Health
+
+x-documentation:
+  - name: Getting Started
+    url: https://docs.ai-gateway.example.com/getting-started
+  - name: Authentication Guide
+    url: https://docs.ai-gateway.example.com/authentication
+  - name: Rate Limits
+    url: https://docs.ai-gateway.example.com/rate-limits
+  - name: Best Practices
+    url: https://docs.ai-gateway.example.com/best-practices
