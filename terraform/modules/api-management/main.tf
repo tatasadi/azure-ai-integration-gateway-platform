@@ -52,6 +52,15 @@ resource "azurerm_api_management_named_value" "ai_endpoint" {
   value               = var.ai_foundry_endpoint
 }
 
+resource "azurerm_api_management_named_value" "managed_identity_client_id" {
+  name                = "managed-identity-client-id"
+  resource_group_name = var.resource_group_name
+  api_management_name = azurerm_api_management.main.name
+  display_name        = "managed-identity-client-id"
+  value               = var.managed_identity_client_id
+  secret              = false
+}
+
 # Backend for Azure OpenAI
 resource "azurerm_api_management_backend" "azure_openai" {
   name                = "azure-openai-backend"

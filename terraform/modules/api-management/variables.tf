@@ -39,6 +39,11 @@ variable "managed_identity_id" {
   type        = string
 }
 
+variable "managed_identity_client_id" {
+  description = "Client ID of the managed identity"
+  type        = string
+}
+
 variable "application_insights_id" {
   description = "ID of Application Insights"
   type        = string

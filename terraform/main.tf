@@ -111,6 +111,7 @@ module "api_management" {
   publisher_email                          = var.apim_publisher_email
   sku_name                                 = var.apim_sku_name
   managed_identity_id                      = module.managed_identity.id
+  managed_identity_client_id               = module.managed_identity.client_id
   application_insights_id                  = module.monitoring.application_insights_id
   application_insights_instrumentation_key = module.monitoring.application_insights_instrumentation_key
   ai_foundry_endpoint                      = module.ai_foundry.endpoint

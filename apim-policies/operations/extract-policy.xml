@@ -3,7 +3,7 @@
         <base />
         <!-- Set backend service and authentication -->
         <set-backend-service backend-id="azure-openai-backend" />
-        <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+        <authentication-managed-identity resource="https://cognitiveservices.azure.com" client-id="{{managed-identity-client-id}}" />
         <rewrite-uri template="/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview" />
         <!-- Store request start time for duration calculation -->
         <set-variable name="operationStartTime" value="@(DateTime.UtcNow)" />

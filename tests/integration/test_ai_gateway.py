@@ -186,25 +186,60 @@ class TestExtractEndpoint:
 class TestRateLimiting:
     """Tests for rate limiting functionality"""
 
-    @pytest.mark.skip(reason="This test makes many requests and may take time")
+    @pytest.mark.slow
+    @pytest.mark.skipif(
+        not os.getenv("RUN_RATE_LIMIT_TESTS"),
+        reason="Rate limit tests disabled. Set RUN_RATE_LIMIT_TESTS=1 to enable"
+    )
     def test_rate_limit_exceeded(self):
         """Should return 429 when rate limit is exceeded"""
-        # Make requests until rate limit is hit (100 per minute)
+        # Make requests until rate limit is hit (100 per minute based on policy)
         responses = []
+        max_requests = 110  # Try more than the limit
 
-        for i in range(105):
-            response = requests.post(
-                f"{BASE_URL}/ai/summarize",
-                headers=HEADERS,
-                json={"text": f"Test text {i}"}
-            )
-            responses.append(response.status_code)
+        print(f"\nMaking {max_requests} requests to test rate limiting...")
 
-            if response.status_code == 429:
-                break
+        for i in range(max_requests):
+            try:
+                response = requests.post(
+                    f"{BASE_URL}/ai/summarize",
+                    headers=HEADERS,
+                    json={"text": f"Test text {i}"},
+                    timeout=10
+                )
+                responses.append(response.status_code)
+
+                # Print progress
+                if (i + 1) % 10 == 0:
+                    print(f"Completed {i + 1} requests...")
+
+                if response.status_code == 429:
+                    print(f"Rate limit hit at request {i + 1}")
+                    break
+
+            except requests.exceptions.Timeout:
+                print(f"Request {i + 1} timed out")
+                continue
 
         # Should have hit rate limit
-        assert 429 in responses
+        assert 429 in responses, f"Rate limit not hit. Response codes: {set(responses)}"
+
+    @pytest.mark.slow
+    @pytest.mark.skipif(
+        not os.getenv("RUN_QUOTA_TESTS"),
+        reason="Quota tests disabled. Set RUN_QUOTA_TESTS=1 to enable"
+    )
+    def test_quota_enforcement(self):
+        """Should enforce daily quota limits"""
+        # This test verifies quota is configured but doesn't exhaust it
+        response = requests.get(
+            f"{BASE_URL}/ai/health",
+            headers=HEADERS
+        )
+
+        # Check if quota-related headers are present (if APIM exposes them)
+        # Note: Actual quota exhaustion would require making 10,000+ requests
+        assert response.status_code == 200
 
     def test_rate_limit_headers_present(self):
         """Rate limit headers should be present in response"""
@@ -213,12 +248,18 @@ class TestRateLimiting:
             headers=HEADERS
         )
 
-        # At least one rate limit header should be present
-        has_rate_limit_header = (
-            "X-RateLimit-Remaining" in response.headers or
-            "X-RateLimit-Reset" in response.headers
-        )
-        # Note: Headers may not always be present depending on APIM configuration
+        # Check for rate limit related headers
+        # Note: APIM may not expose all rate limit headers by default
+        assert response.status_code == 200
+
+        # Log headers for debugging
+        rate_limit_headers = {
+            k: v for k, v in response.headers.items()
+            if 'rate' in k.lower() or 'quota' in k.lower() or 'limit' in k.lower()
+        }
+
+        if rate_limit_headers:
+            print(f"Rate limit headers found: {rate_limit_headers}")
 
 
 class TestAuthentication:

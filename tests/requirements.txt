@@ -1,0 +1,27 @@
+# Azure AI Integration Gateway - Test Dependencies
+# Install with: pip install -r requirements.txt
+
+# Testing Framework
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+pytest-timeout>=2.1.0
+
+# HTTP Client
+requests>=2.31.0
+
+# Azure SDK (for monitoring verification tests)
+azure-identity>=1.14.0
+azure-monitor-query>=1.2.0
+azure-mgmt-apimanagement>=4.0.0
+
+# Data Validation
+jsonschema>=4.19.0
+
+# Test Utilities
+python-dotenv>=1.0.0
+faker>=19.6.0
+
+# Code Quality (optional)
+flake8>=6.1.0
+black>=23.9.0
