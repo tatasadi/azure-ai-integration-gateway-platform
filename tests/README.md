@@ -19,7 +19,7 @@ export APIM_SUBSCRIPTION_KEY="your-subscription-key"
 
 # Required for monitoring tests
 export AZURE_SUBSCRIPTION_ID="your-subscription-id"
-export APPLICATION_INSIGHTS_ID="your-app-insights-workspace-id"
+export APPLICATION_INSIGHTS_ID="your-log-analytics-workspace-id"  # NOT App Insights App ID!
 
 # Login to Azure
 az login
@@ -134,7 +134,7 @@ pytest -m "not slow" -v
 | `APIM_BASE_URL` | Yes (integration) | Base URL of APIM instance |
 | `APIM_SUBSCRIPTION_KEY` | Yes (integration) | Valid subscription key |
 | `AZURE_SUBSCRIPTION_ID` | Yes (monitoring) | Azure subscription ID |
-| `APPLICATION_INSIGHTS_ID` | Yes (monitoring) | App Insights workspace ID |
+| `APPLICATION_INSIGHTS_ID` | Yes (monitoring) | Log Analytics workspace ID (customerId, not App Insights App ID) |
 | `RUN_RATE_LIMIT_TESTS` | No | Set to `1` to enable rate limit tests |
 | `RUN_QUOTA_TESTS` | No | Set to `1` to enable quota tests |
 
@@ -142,7 +142,15 @@ pytest -m "not slow" -v
 
 ## Test Markers
 
-Tests use pytest markers for categorization:
+Tests use pytest markers for categorization. Markers are defined in `pytest.ini`:
+
+| Marker | Description | Usage |
+|--------|-------------|-------|
+| `slow` | Slow tests (rate limiting, load tests) | Skip with `-m "not slow"` |
+| `integration` | Tests requiring deployed Azure resources | Skip with `-m "not integration"` |
+| `smoke` | Quick smoke tests | Run with `-m smoke` |
+
+**Examples:**
 
 ```bash
 # Run only smoke tests
@@ -153,6 +161,9 @@ pytest -m "not slow" -v
 
 # Run only tests that don't require deployment
 pytest -m "not integration" -v
+
+# List all available markers
+pytest --markers
 ```
 
 ---
@@ -245,6 +256,15 @@ pip install -r requirements.txt --upgrade
 # Verify Azure login
 az login
 az account show
+
+# Get the correct Log Analytics workspace ID
+az monitor log-analytics workspace show \
+  --workspace-name log-aigateway-dev-swedencentral \
+  --resource-group rg-aigateway-dev-swedencentral \
+  --query customerId -o tsv
+
+# Set the correct workspace ID (NOT the App Insights App ID!)
+export APPLICATION_INSIGHTS_ID="<workspace-customer-id>"
 
 # Verify permissions
 az role assignment list --assignee $(az account show --query user.name -o tsv)

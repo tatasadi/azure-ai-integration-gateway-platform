@@ -75,7 +75,7 @@ class TestTerraformValidation:
             "modules/api-management",
             "modules/key-vault",
             "modules/monitoring",
-            "modules/openai"
+            "modules/ai-foundry"
         ]
 
         for module in required_modules:

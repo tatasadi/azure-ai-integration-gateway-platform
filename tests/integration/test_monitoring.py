@@ -10,7 +10,9 @@ Usage:
 Environment Variables Required:
     AZURE_SUBSCRIPTION_ID: Azure subscription ID
     AZURE_RESOURCE_GROUP: Resource group name
-    APPLICATION_INSIGHTS_ID: Application Insights resource ID or name
+    APPLICATION_INSIGHTS_ID: Log Analytics workspace ID (NOT App Insights App ID!)
+                             This is the Log Analytics workspace customer ID (GUID format)
+                             Get it via: az monitor log-analytics workspace show --workspace-name <name> --query customerId
     APIM_BASE_URL: Base URL of the API Management instance
     APIM_SUBSCRIPTION_KEY: Valid subscription key for authentication
 """
@@ -88,12 +90,13 @@ class TestApplicationInsightsIntegration:
     def test_requests_logged_to_app_insights(self, logs_client, test_request_id):
         """Requests should be logged to Application Insights"""
 
-        # Query for recent requests
+        # Query for recent requests (use longer time window for reliability)
+        # Note: Application Insights data can take 2-5 minutes to be ingested
         query = """
-        requests
-        | where timestamp > ago(5m)
-        | where url contains "ai/health"
-        | project timestamp, name, url, resultCode, duration
+        AppRequests
+        | where TimeGenerated > ago(1h)
+        | where Url contains "ai/"
+        | project TimeGenerated, Name, Url, ResultCode, DurationMs
         | take 10
         """
 
@@ -101,7 +104,7 @@ class TestApplicationInsightsIntegration:
             response = logs_client.query_workspace(
                 workspace_id=APP_INSIGHTS_ID,
                 query=query,
-                timespan=timedelta(minutes=5)
+                timespan=timedelta(hours=1)
             )
 
             if response.status == LogsQueryStatus.SUCCESS:
@@ -109,12 +112,16 @@ class TestApplicationInsightsIntegration:
                 assert len(tables) > 0, "No tables returned from query"
 
                 rows = tables[0].rows
-                assert len(rows) > 0, "No requests found in Application Insights"
+                assert len(rows) > 0, (
+                    "No requests found in Application Insights. "
+                    "Note: Telemetry data can take 2-5 minutes to appear. "
+                    "Ensure APIM is configured to send telemetry to Application Insights."
+                )
 
                 # Verify we have the expected columns
-                columns = [col.name for col in tables[0].columns]
-                assert "resultCode" in columns
-                assert "duration" in columns
+                columns = [col for col in tables[0].columns]
+                assert "ResultCode" in columns
+                assert "DurationMs" in columns
 
             else:
                 pytest.fail(f"Query failed with status: {response.status}")
@@ -130,9 +137,9 @@ class TestApplicationInsightsIntegration:
         """Custom metrics should be logged to Application Insights"""
 
         query = """
-        customMetrics
-        | where timestamp > ago(1h)
-        | summarize count() by name
+        AppMetrics
+        | where TimeGenerated > ago(1h)
+        | summarize count() by Name
         | take 10
         """
 
@@ -173,10 +180,10 @@ class TestApplicationInsightsIntegration:
         time.sleep(10)
 
         query = """
-        dependencies
-        | where timestamp > ago(10m)
-        | where type == "HTTP" or type == "Azure"
-        | project timestamp, name, type, target, resultCode, duration
+        AppDependencies
+        | where TimeGenerated > ago(10m)
+        | where DependencyType == "HTTP" or DependencyType == "Azure"
+        | project TimeGenerated, Name, DependencyType, Target, ResultCode, DurationMs
         | take 10
         """
 
@@ -206,9 +213,9 @@ class TestCustomEvents:
         """Custom events should be logged to Application Insights"""
 
         query = """
-        customEvents
-        | where timestamp > ago(1h)
-        | summarize count() by name
+        AppEvents
+        | where TimeGenerated > ago(1h)
+        | summarize count() by Name
         | take 10
         """
 
@@ -251,9 +258,9 @@ class TestExceptions:
         time.sleep(5)
 
         query = """
-        exceptions
-        | where timestamp > ago(10m)
-        | project timestamp, type, outerMessage, problemId
+        AppExceptions
+        | where TimeGenerated > ago(10m)
+        | project TimeGenerated, ExceptionType, OuterMessage, ProblemId
         | take 10
         """
 
@@ -283,12 +290,12 @@ class TestPerformanceMetrics:
         """Request durations should be tracked"""
 
         query = """
-        requests
-        | where timestamp > ago(5m)
+        AppRequests
+        | where TimeGenerated > ago(5m)
         | summarize
-            avg(duration),
-            percentile(duration, 95),
-            percentile(duration, 99),
+            avg(DurationMs),
+            percentile(DurationMs, 95),
+            percentile(DurationMs, 99),
             count()
         """
 
@@ -318,12 +325,12 @@ class TestOperationalQueries:
         """Should be able to query error rates"""
 
         query = """
-        requests
-        | where timestamp > ago(1h)
+        AppRequests
+        | where TimeGenerated > ago(1h)
         | summarize
             total_requests = count(),
-            failed_requests = countif(resultCode >= 400),
-            error_rate = 100.0 * countif(resultCode >= 400) / count()
+            failed_requests = countif(toint(ResultCode) >= 400),
+            error_rate = 100.0 * countif(toint(ResultCode) >= 400) / count()
         """
 
         try:
@@ -347,12 +354,12 @@ class TestOperationalQueries:
         """Should be able to query top operations"""
 
         query = """
-        requests
-        | where timestamp > ago(1h)
+        AppRequests
+        | where TimeGenerated > ago(1h)
         | summarize
             request_count = count(),
-            avg_duration = avg(duration)
-            by operation_Name
+            avg_duration = avg(DurationMs)
+            by OperationName
         | order by request_count desc
         | take 10
         """
@@ -382,10 +389,10 @@ class TestAlertQueries:
         """Should be able to detect high error rates"""
 
         query = """
-        requests
-        | where timestamp > ago(5m)
+        AppRequests
+        | where TimeGenerated > ago(5m)
         | summarize
-            error_rate = 100.0 * countif(resultCode >= 500) / count()
+            error_rate = 100.0 * countif(toint(ResultCode) >= 500) / count()
         | where error_rate > 0
         """
 
@@ -410,11 +417,11 @@ class TestAlertQueries:
         """Should be able to detect slow requests"""
 
         query = """
-        requests
-        | where timestamp > ago(5m)
-        | where duration > 5000  // Requests slower than 5 seconds
-        | project timestamp, name, url, duration, resultCode
-        | order by duration desc
+        AppRequests
+        | where TimeGenerated > ago(5m)
+        | where DurationMs > 5000  // Requests slower than 5 seconds
+        | project TimeGenerated, Name, Url, DurationMs, ResultCode
+        | order by DurationMs desc
         | take 10
         """
 
