@@ -12,13 +12,16 @@
             string style = (string)context.Variables[&quot;style&quot;];
             int maxLength = (int)context.Variables[&quot;maxLength&quot;];
 
-            string styleInstruction = style switch {
-                &quot;detailed&quot; => &quot;Provide a comprehensive summary that covers all key points and important details.&quot;,
-                &quot;bullet_points&quot; => &quot;Provide a summary formatted as bullet points, with each point capturing a key idea.&quot;,
-                _ => &quot;Provide a brief, concise summary that captures the main points.&quot;
-            };
+            string styleInstruction;
+            if (style == &quot;detailed&quot;) {
+                styleInstruction = &quot;Provide a comprehensive summary that covers all key points and important details.&quot;;
+            } else if (style == &quot;bullet_points&quot;) {
+                styleInstruction = &quot;Provide a summary formatted as bullet points, with each point capturing a key idea.&quot;;
+            } else {
+                styleInstruction = &quot;Provide a brief, concise summary that captures the main points.&quot;;
+            }
 
-            return $&quot;You are a text summarization assistant. {styleInstruction} Keep the summary under {maxLength} tokens. Focus on the most important information and maintain clarity.&quot;;
+            return string.Format(&quot;You are a text summarization assistant. {0} Keep the summary under {1} tokens. Focus on the most important information and maintain clarity.&quot;, styleInstruction, maxLength);
         }" />
 
         <!-- Transform request body to OpenAI format -->

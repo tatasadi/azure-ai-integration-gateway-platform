@@ -56,6 +56,12 @@ resource "azurerm_api_management_api_operation" "summarize" {
       }
     }
   }
+
+  depends_on = [
+    azurerm_api_management_api_policy.ai_gateway,
+    azurerm_api_management_named_value.managed_identity_client_id,
+    azurerm_api_management_backend.azure_openai
+  ]
 }
 
 # Operation: Extract
@@ -111,6 +117,12 @@ resource "azurerm_api_management_api_operation" "extract" {
       }
     }
   }
+
+  depends_on = [
+    azurerm_api_management_api_policy.ai_gateway,
+    azurerm_api_management_named_value.managed_identity_client_id,
+    azurerm_api_management_backend.azure_openai
+  ]
 }
 
 # Operation: Health Check
@@ -145,6 +157,10 @@ resource "azurerm_api_management_api_operation" "health" {
       }
     }
   }
+
+  depends_on = [
+    azurerm_api_management_api_policy.ai_gateway
+  ]
 }
 
 # API Diagnostic Settings
