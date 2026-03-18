@@ -249,6 +249,27 @@ Key variables in `terraform.tfvars`:
 
 ## Testing
 
+### Test with Postman
+
+The easiest way to test the API is using the provided Postman collection:
+
+```bash
+# Import the collection and environment files into Postman
+# Files located in the postman directory:
+# - postman-collection.json
+# - postman-environment-dev.json
+# - postman-environment-staging.json
+# - postman-environment-prod.json
+```
+
+See [POSTMAN-GUIDE.md](POSTMAN-GUIDE.md) for detailed instructions.
+
+**Quick Start:**
+1. Import `postman-collection.json` into Postman
+2. Import the appropriate environment file (e.g., `postman-environment-dev.json`)
+3. Update the `subscriptionKey` variable with your key
+4. Run requests from the collection
+
 ### Run Integration Tests
 
 ```bash

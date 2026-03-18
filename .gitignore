@@ -91,6 +91,10 @@ credentials.json
 appsettings.*.json
 !appsettings.example.json
 
+# Postman - Keep template files only, ignore ones with real credentials
+postman-environment-*.local.json
+**/postman_environment.json
+
 # Backups
 *.bak
 *.backup

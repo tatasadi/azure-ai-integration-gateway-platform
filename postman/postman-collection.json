@@ -1,0 +1,589 @@
+{
+  "info": {
+    "name": "Azure AI Integration Gateway API",
+    "_postman_id": "azure-ai-gateway-collection",
+    "description": "Enterprise-grade AI Gateway providing centralized governance, security, rate limiting, and observability for AI services.\n\n## Features\n- Text Summarization: Condense long text into concise summaries\n- Information Extraction: Extract structured data from unstructured text\n- Health Monitoring: Check API and backend service health\n\n## Authentication\nAll requests require a subscription key in the `Ocp-Apim-Subscription-Key` header.\n\n## Rate Limits\n- Rate Limit: 100 requests per minute per subscription\n- Daily Quota: 10,000 requests per day per subscription\n\n## Setup Instructions\n1. Set the `baseUrl` variable to your APIM gateway URL\n2. Set the `subscriptionKey` variable to your subscription key\n3. Select the appropriate environment (dev, staging, or prod)\n\nFor more information, visit: https://docs.ai-gateway.example.com",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "item": [
+    {
+      "name": "AI Operations",
+      "item": [
+        {
+          "name": "Summarize Text - Basic",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has summary field\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('summary');",
+                  "    pm.expect(jsonData).to.have.property('tokens_used');",
+                  "    pm.expect(jsonData).to.have.property('request_id');",
+                  "    pm.expect(jsonData).to.have.property('model');",
+                  "});",
+                  "",
+                  "pm.test(\"Response headers include tracking info\", function () {",
+                  "    pm.response.to.have.header('X-Request-Id');",
+                  "    pm.response.to.have.header('X-Token-Usage');",
+                  "});",
+                  "",
+                  "// Store request_id for tracking",
+                  "var jsonData = pm.response.json();",
+                  "pm.environment.set(\"last_request_id\", jsonData.request_id);",
+                  "",
+                  "console.log(\"Summary:\", jsonData.summary);",
+                  "console.log(\"Tokens used:\", jsonData.tokens_used);",
+                  "console.log(\"Request ID:\", jsonData.request_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Ocp-Apim-Subscription-Key",
+                "value": "{{subscriptionKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The global economy showed signs of recovery in 2026 as technology sectors led growth across major markets. Artificial intelligence continued to drive innovation in healthcare, finance, and manufacturing. Companies invested heavily in AI infrastructure, while governments developed regulatory frameworks to ensure responsible deployment. Experts predict sustained growth as AI adoption accelerates across industries.\",\n  \"style\": \"concise\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/summarize",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "summarize"]
+            },
+            "description": "Summarizes long text into a concise summary using GPT-4o.\n\n**Parameters:**\n- `text` (required): Text to summarize (10-400,000 characters)\n- `style` (optional): Summary style - 'concise', 'detailed', or 'bullet_points' (default: 'concise')\n- `max_length` (optional): Maximum length in tokens (50-5000, default: 500)"
+          },
+          "response": [
+            {
+              "name": "Successful Summarization",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Ocp-Apim-Subscription-Key",
+                    "value": "{{subscriptionKey}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"The global economy showed signs of recovery in 2026 as technology sectors led growth across major markets. Artificial intelligence continued to drive innovation in healthcare, finance, and manufacturing.\",\n  \"style\": \"concise\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/ai/summarize",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["ai", "summarize"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-Id",
+                  "value": "a1b2c3d4-e5f6-4789-0123-456789abcdef"
+                },
+                {
+                  "key": "X-Token-Usage",
+                  "value": "156"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "99"
+                }
+              ],
+              "body": "{\n  \"summary\": \"Global economy recovers in 2026, driven by AI innovation in key sectors.\",\n  \"tokens_used\": 156,\n  \"request_id\": \"a1b2c3d4-e5f6-4789-0123-456789abcdef\",\n  \"model\": \"gpt-4o\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Summarize Text - Detailed",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has all required fields\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('summary');",
+                  "    pm.expect(jsonData).to.have.property('tokens_used');",
+                  "    pm.expect(jsonData).to.have.property('request_id');",
+                  "    pm.expect(jsonData).to.have.property('model');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Ocp-Apim-Subscription-Key",
+                "value": "{{subscriptionKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Artificial intelligence continues to transform industries worldwide. Recent breakthroughs in large language models have enabled more sophisticated applications in healthcare, finance, and education. Companies are investing heavily in AI infrastructure and talent acquisition. Healthcare providers use AI for diagnostic assistance and personalized treatment plans. Financial institutions leverage AI for fraud detection and risk assessment. Educational platforms implement AI tutors for personalized learning experiences. Regulatory frameworks are being developed to ensure responsible AI deployment. Privacy concerns and ethical considerations remain at the forefront of policy discussions. Experts predict continued growth in AI adoption across all sectors over the next decade.\",\n  \"max_length\": 1000,\n  \"style\": \"detailed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/summarize",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "summarize"]
+            },
+            "description": "Summarizes text with a detailed style and custom maximum length."
+          },
+          "response": []
+        },
+        {
+          "name": "Summarize Text - Bullet Points",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Ocp-Apim-Subscription-Key",
+                "value": "{{subscriptionKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The quarterly earnings report shows strong performance across all business units. Revenue increased by 15% year-over-year, reaching $50 million. Operating expenses were well controlled at $30 million. The cloud services division was the strongest performer with 30% growth. Customer acquisition increased by 25% with improved retention rates. The company expanded into three new markets in Asia. Research and development investment increased to support AI initiatives. The board approved a dividend of $0.50 per share.\",\n  \"style\": \"bullet_points\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/summarize",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "summarize"]
+            },
+            "description": "Summarizes text in bullet-point format for easy scanning."
+          },
+          "response": []
+        },
+        {
+          "name": "Extract Information - Invoice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has extracted_data field\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('extracted_data');",
+                  "    pm.expect(jsonData).to.have.property('tokens_used');",
+                  "    pm.expect(jsonData).to.have.property('request_id');",
+                  "    pm.expect(jsonData).to.have.property('model');",
+                  "});",
+                  "",
+                  "pm.test(\"Extracted data has expected fields\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.extracted_data).to.have.property('invoice_number');",
+                  "    pm.expect(jsonData.extracted_data).to.have.property('customer');",
+                  "});",
+                  "",
+                  "console.log(\"Extracted Data:\", JSON.stringify(pm.response.json().extracted_data, null, 2));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Ocp-Apim-Subscription-Key",
+                "value": "{{subscriptionKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"INVOICE #INV-2026-001\\nDate: March 17, 2026\\nBill To: Tech Solutions Inc.\\n123 Business Avenue\\nSan Francisco, CA 94105\\n\\nItem: Cloud Services Subscription\\nQuantity: 1\\nUnit Price: $1,500.00\\nTotal: $1,500.00\\n\\nDue Date: April 16, 2026\\nPayment Terms: Net 30\\n\\nThank you for your business!\",\n  \"schema\": {\n    \"type\": \"object\",\n    \"properties\": {\n      \"invoice_number\": {\n        \"type\": \"string\"\n      },\n      \"invoice_date\": {\n        \"type\": \"string\",\n        \"format\": \"date\"\n      },\n      \"customer\": {\n        \"type\": \"string\"\n      },\n      \"total\": {\n        \"type\": \"number\"\n      },\n      \"due_date\": {\n        \"type\": \"string\",\n        \"format\": \"date\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/extract",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "extract"]
+            },
+            "description": "Extracts structured information from an invoice using a defined JSON schema.\n\n**Parameters:**\n- `text` (required): Text to extract information from (10-400,000 characters)\n- `schema` (required): JSON Schema defining the expected structure of extracted data"
+          },
+          "response": [
+            {
+              "name": "Successful Extraction",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Ocp-Apim-Subscription-Key",
+                    "value": "{{subscriptionKey}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"INVOICE #12345\\nDate: March 11, 2026\\nBill To: Acme Corp\\nTotal Amount: $2,450.00\",\n  \"schema\": {\n    \"type\": \"object\",\n    \"properties\": {\n      \"invoice_number\": {\"type\": \"string\"},\n      \"invoice_date\": {\"type\": \"string\", \"format\": \"date\"},\n      \"customer\": {\"type\": \"string\"},\n      \"total\": {\"type\": \"number\"}\n    }\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/ai/extract",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["ai", "extract"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-Request-Id",
+                  "value": "b2c3d4e5-f6a7-4890-1234-567890bcdefg"
+                },
+                {
+                  "key": "X-Token-Usage",
+                  "value": "234"
+                }
+              ],
+              "body": "{\n  \"extracted_data\": {\n    \"invoice_number\": \"12345\",\n    \"invoice_date\": \"2026-03-11\",\n    \"customer\": \"Acme Corp\",\n    \"total\": 2450.00\n  },\n  \"confidence\": 0.98,\n  \"tokens_used\": 234,\n  \"request_id\": \"b2c3d4e5-f6a7-4890-1234-567890bcdefg\",\n  \"model\": \"gpt-4o\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Extract Information - Contact Details",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Ocp-Apim-Subscription-Key",
+                "value": "{{subscriptionKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Please contact our sales representative:\\n\\nJohn Smith\\nSenior Sales Manager\\nEmail: john.smith@techcorp.com\\nPhone: +1 (555) 123-4567\\nOffice: Building A, Floor 5\\nTech Corp Inc.\\n456 Innovation Drive\\nAustin, TX 78701\\n\\nAvailable Monday-Friday, 9 AM - 5 PM CST\",\n  \"schema\": {\n    \"type\": \"object\",\n    \"properties\": {\n      \"name\": {\n        \"type\": \"string\"\n      },\n      \"title\": {\n        \"type\": \"string\"\n      },\n      \"email\": {\n        \"type\": \"string\",\n        \"format\": \"email\"\n      },\n      \"phone\": {\n        \"type\": \"string\"\n      },\n      \"company\": {\n        \"type\": \"string\"\n      },\n      \"address\": {\n        \"type\": \"string\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/extract",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "extract"]
+            },
+            "description": "Extracts contact information from unstructured text."
+          },
+          "response": []
+        }
+      ],
+      "description": "AI-powered text processing operations including summarization and information extraction."
+    },
+    {
+      "name": "Health & Monitoring",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 or 503\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has status field\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('timestamp');",
+                  "    pm.expect(jsonData).to.have.property('services');",
+                  "    pm.expect(jsonData).to.have.property('version');",
+                  "});",
+                  "",
+                  "pm.test(\"All services reported\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.services).to.have.property('api_gateway');",
+                  "    pm.expect(jsonData.services).to.have.property('ai_foundry');",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "console.log(\"Overall Status:\", jsonData.status);",
+                  "console.log(\"Services:\", JSON.stringify(jsonData.services, null, 2));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Ocp-Apim-Subscription-Key",
+                "value": "{{subscriptionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ai/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "health"]
+            },
+            "description": "Verifies that the API gateway and backend services are operational.\n\n**Services Checked:**\n- API Gateway (APIM)\n- Azure AI Foundry (OpenAI)\n- Key Vault\n\n**Response Codes:**\n- 200: Service is healthy\n- 503: Service is unhealthy or degraded"
+          },
+          "response": [
+            {
+              "name": "Healthy Status",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Ocp-Apim-Subscription-Key",
+                    "value": "{{subscriptionKey}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/ai/health",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["ai", "health"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": \"healthy\",\n  \"timestamp\": \"2026-03-18T10:30:00Z\",\n  \"services\": {\n    \"api_gateway\": \"healthy\",\n    \"ai_foundry\": \"healthy\",\n    \"key_vault\": \"healthy\"\n  },\n  \"version\": \"1.0.0\"\n}"
+            },
+            {
+              "name": "Degraded Status",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Ocp-Apim-Subscription-Key",
+                    "value": "{{subscriptionKey}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/ai/health",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["ai", "health"]
+                }
+              },
+              "status": "Service Unavailable",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": \"degraded\",\n  \"timestamp\": \"2026-03-18T10:30:00Z\",\n  \"services\": {\n    \"api_gateway\": \"healthy\",\n    \"ai_foundry\": \"unhealthy\",\n    \"key_vault\": \"healthy\"\n  },\n  \"version\": \"1.0.0\"\n}"
+            }
+          ]
+        }
+      ],
+      "description": "Service health and monitoring endpoints."
+    },
+    {
+      "name": "Error Scenarios",
+      "item": [
+        {
+          "name": "Invalid Request - Missing Text",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Ocp-Apim-Subscription-Key",
+                "value": "{{subscriptionKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"style\": \"concise\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/summarize",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "summarize"]
+            },
+            "description": "Test case for missing required field. Should return 400 Bad Request."
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Request - Text Too Short",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Ocp-Apim-Subscription-Key",
+                "value": "{{subscriptionKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Short\",\n  \"style\": \"concise\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ai/summarize",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "summarize"]
+            },
+            "description": "Test case for text that is too short (minimum 10 characters). Should return 400 Bad Request."
+          },
+          "response": []
+        },
+        {
+          "name": "Unauthorized - Missing Key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ai/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "health"]
+            },
+            "description": "Test case for missing subscription key. Should return 401 Unauthorized."
+          },
+          "response": []
+        },
+        {
+          "name": "Unauthorized - Invalid Key",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Ocp-Apim-Subscription-Key",
+                "value": "invalid-key-12345",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ai/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["ai", "health"]
+            },
+            "description": "Test case for invalid subscription key. Should return 401 Unauthorized."
+          },
+          "response": []
+        }
+      ],
+      "description": "Test cases for error handling and validation."
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set timestamp for requests",
+          "pm.environment.set(\"timestamp\", new Date().toISOString());",
+          "",
+          "// Log request details",
+          "console.log(\"Request URL:\", pm.request.url.toString());",
+          "console.log(\"Request Time:\", pm.environment.get(\"timestamp\"));"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Log response time",
+          "console.log(\"Response Time:\", pm.response.responseTime, \"ms\");",
+          "",
+          "// Check rate limit headers if present",
+          "if (pm.response.headers.has(\"X-RateLimit-Remaining\")) {",
+          "    var remaining = pm.response.headers.get(\"X-RateLimit-Remaining\");",
+          "    console.log(\"Rate Limit Remaining:\", remaining);",
+          "    ",
+          "    if (parseInt(remaining) < 10) {",
+          "        console.warn(\"WARNING: Rate limit almost exceeded! Remaining:\", remaining);",
+          "    }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://apim-aigateway-dev-eastus-01.azure-api.net",
+      "type": "string"
+    },
+    {
+      "key": "subscriptionKey",
+      "value": "YOUR_SUBSCRIPTION_KEY_HERE",
+      "type": "string"
+    }
+  ]
+}

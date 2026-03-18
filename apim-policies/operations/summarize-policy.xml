@@ -1,12 +1,59 @@
 <policies>
     <inbound>
         <base />
+        <!-- Parse incoming request body -->
+        <set-variable name="requestBody" value="@(context.Request.Body.As&lt;JObject&gt;(preserveContent: true))" />
+        <set-variable name="inputText" value="@(((JObject)context.Variables[&quot;requestBody&quot;])[&quot;text&quot;]?.ToString() ?? &quot;&quot;)" />
+        <set-variable name="maxLength" value="@(((JObject)context.Variables[&quot;requestBody&quot;])[&quot;max_length&quot;]?.Value&lt;int&gt;() ?? 500)" />
+        <set-variable name="style" value="@(((JObject)context.Variables[&quot;requestBody&quot;])[&quot;style&quot;]?.ToString() ?? &quot;concise&quot;)" />
+
+        <!-- Build system prompt based on style -->
+        <set-variable name="systemPrompt" value="@{
+            string style = (string)context.Variables[&quot;style&quot;];
+            int maxLength = (int)context.Variables[&quot;maxLength&quot;];
+
+            string styleInstruction = style switch {
+                &quot;detailed&quot; => &quot;Provide a comprehensive summary that covers all key points and important details.&quot;,
+                &quot;bullet_points&quot; => &quot;Provide a summary formatted as bullet points, with each point capturing a key idea.&quot;,
+                _ => &quot;Provide a brief, concise summary that captures the main points.&quot;
+            };
+
+            return $&quot;You are a text summarization assistant. {styleInstruction} Keep the summary under {maxLength} tokens. Focus on the most important information and maintain clarity.&quot;;
+        }" />
+
+        <!-- Transform request body to OpenAI format -->
+        <set-body>@{
+            var systemPrompt = (string)context.Variables["systemPrompt"];
+            var inputText = (string)context.Variables["inputText"];
+            var maxLength = (int)context.Variables["maxLength"];
+
+            return new JObject(
+                new JProperty("messages", new JArray(
+                    new JObject(
+                        new JProperty("role", "system"),
+                        new JProperty("content", systemPrompt)
+                    ),
+                    new JObject(
+                        new JProperty("role", "user"),
+                        new JProperty("content", inputText)
+                    )
+                )),
+                new JProperty("max_tokens", maxLength),
+                new JProperty("temperature", 0.3),
+                new JProperty("top_p", 1.0),
+                new JProperty("frequency_penalty", 0.0),
+                new JProperty("presence_penalty", 0.0)
+            ).ToString();
+        }</set-body>
+
         <!-- Set backend service and authentication -->
         <set-backend-service backend-id="azure-openai-backend" />
         <authentication-managed-identity resource="https://cognitiveservices.azure.com" client-id="{{managed-identity-client-id}}" />
         <rewrite-uri template="/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview" />
+
         <!-- Store request start time for duration calculation -->
         <set-variable name="operationStartTime" value="@(DateTime.UtcNow)" />
+
         <!-- Log operation start -->
         <trace source="AI-Gateway-Summarize" severity="information">@{
                 return JsonConvert.SerializeObject(new {
@@ -14,6 +61,8 @@
                     RequestId = context.RequestId,
                     SubscriptionId = context.Subscription?.Id ?? "anonymous",
                     Operation = "summarize",
+                    Style = context.Variables["style"],
+                    MaxLength = context.Variables["maxLength"],
                     Timestamp = DateTime.UtcNow
                 });
             }</trace>
@@ -25,11 +74,13 @@
         <base />
         <!-- Calculate operation duration -->
         <set-variable name="operationDuration" value="@((DateTime.UtcNow - ((DateTime)context.Variables[&quot;operationStartTime&quot;])).TotalMilliseconds)" />
-        <!-- Extract token usage from response -->
+        <!-- Extract token usage and response from OpenAI response -->
         <set-variable name="responseBody" value="@(context.Response.Body.As&lt;JObject&gt;(preserveContent: true))" />
         <set-variable name="tokenUsage" value="@(((JObject)context.Variables[&quot;responseBody&quot;])[&quot;usage&quot;]?[&quot;total_tokens&quot;]?.Value&lt;int&gt;() ?? 0)" />
         <set-variable name="promptTokens" value="@(((JObject)context.Variables[&quot;responseBody&quot;])[&quot;usage&quot;]?[&quot;prompt_tokens&quot;]?.Value&lt;int&gt;() ?? 0)" />
         <set-variable name="completionTokens" value="@(((JObject)context.Variables[&quot;responseBody&quot;])[&quot;usage&quot;]?[&quot;completion_tokens&quot;]?.Value&lt;int&gt;() ?? 0)" />
+        <set-variable name="summaryText" value="@(((JObject)context.Variables[&quot;responseBody&quot;])[&quot;choices&quot;]?[0]?[&quot;message&quot;]?[&quot;content&quot;]?.ToString() ?? &quot;&quot;)" />
+
         <!-- Calculate estimated cost (GPT-4o pricing: $2.50/1M input, $10.00/1M output tokens) -->
         <set-variable name="estimatedCost" value="@{
             int promptTokens = (int)context.Variables[&quot;promptTokens&quot;];
@@ -38,6 +89,21 @@
             double outputCost = (completionTokens / 1000000.0) * 10.00;
             return inputCost + outputCost;
         }" />
+
+        <!-- Transform OpenAI response to simplified format -->
+        <set-body>@{
+            var summaryText = (string)context.Variables["summaryText"];
+            var tokenUsage = (int)context.Variables["tokenUsage"];
+            var requestId = (string)context.Variables["requestId"];
+
+            return new JObject(
+                new JProperty("summary", summaryText),
+                new JProperty("tokens_used", tokenUsage),
+                new JProperty("request_id", requestId),
+                new JProperty("model", "gpt-4o")
+            ).ToString();
+        }</set-body>
+
         <!-- Log detailed operation completion -->
         <trace source="AI-Gateway-Summarize" severity="information">@{
                 return JsonConvert.SerializeObject(new {

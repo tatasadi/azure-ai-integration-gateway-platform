@@ -1,0 +1,39 @@
+{
+  "id": "azure-ai-gateway-prod-environment",
+  "name": "Azure AI Gateway - Production",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "https://apim-aigateway-prod-eastus-01.azure-api.net",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "subscriptionKey",
+      "value": "YOUR_PROD_SUBSCRIPTION_KEY_HERE",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "environment",
+      "value": "production",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "last_request_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "timestamp",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment",
+  "_postman_exported_at": "2026-03-18T00:00:00.000Z",
+  "_postman_exported_using": "Postman/10.0.0"
+}

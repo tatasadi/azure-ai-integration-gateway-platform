@@ -1,12 +1,50 @@
 <policies>
     <inbound>
         <base />
+        <!-- Parse incoming request body -->
+        <set-variable name="requestBody" value="@(context.Request.Body.As&lt;JObject&gt;(preserveContent: true))" />
+        <set-variable name="inputText" value="@(((JObject)context.Variables[&quot;requestBody&quot;])[&quot;text&quot;]?.ToString() ?? &quot;&quot;)" />
+        <set-variable name="extractionSchema" value="@(((JObject)context.Variables[&quot;requestBody&quot;])[&quot;schema&quot;]?.ToString() ?? &quot;{}&quot;)" />
+
+        <!-- Build system prompt for structured extraction -->
+        <set-variable name="systemPrompt" value="@{
+            string schema = (string)context.Variables[&quot;extractionSchema&quot;];
+            return $&quot;You are a data extraction assistant. Extract structured information from the provided text according to the following JSON schema:\n\n{schema}\n\nRespond ONLY with valid JSON that matches the schema. Do not include any explanatory text, markdown formatting, or code blocks - just the raw JSON object.&quot;;
+        }" />
+
+        <!-- Transform request body to OpenAI format -->
+        <set-body>@{
+            var systemPrompt = (string)context.Variables["systemPrompt"];
+            var inputText = (string)context.Variables["inputText"];
+
+            return new JObject(
+                new JProperty("messages", new JArray(
+                    new JObject(
+                        new JProperty("role", "system"),
+                        new JProperty("content", systemPrompt)
+                    ),
+                    new JObject(
+                        new JProperty("role", "user"),
+                        new JProperty("content", inputText)
+                    )
+                )),
+                new JProperty("max_tokens", 2000),
+                new JProperty("temperature", 0.1),
+                new JProperty("top_p", 1.0),
+                new JProperty("response_format", new JObject(
+                    new JProperty("type", "json_object")
+                ))
+            ).ToString();
+        }</set-body>
+
         <!-- Set backend service and authentication -->
         <set-backend-service backend-id="azure-openai-backend" />
         <authentication-managed-identity resource="https://cognitiveservices.azure.com" client-id="{{managed-identity-client-id}}" />
         <rewrite-uri template="/openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview" />
+
         <!-- Store request start time for duration calculation -->
         <set-variable name="operationStartTime" value="@(DateTime.UtcNow)" />
+
         <!-- Log operation start -->
         <trace source="AI-Gateway-Extract" severity="information">@{
                 return JsonConvert.SerializeObject(new {
@@ -25,11 +63,13 @@
         <base />
         <!-- Calculate operation duration -->
         <set-variable name="operationDuration" value="@((DateTime.UtcNow - ((DateTime)context.Variables[&quot;operationStartTime&quot;])).TotalMilliseconds)" />
-        <!-- Extract token usage from response -->
+        <!-- Extract token usage and response from OpenAI response -->
         <set-variable name="responseBody" value="@(context.Response.Body.As&lt;JObject&gt;(preserveContent: true))" />
         <set-variable name="tokenUsage" value="@(((JObject)context.Variables[&quot;responseBody&quot;])[&quot;usage&quot;]?[&quot;total_tokens&quot;]?.Value&lt;int&gt;() ?? 0)" />
         <set-variable name="promptTokens" value="@(((JObject)context.Variables[&quot;responseBody&quot;])[&quot;usage&quot;]?[&quot;prompt_tokens&quot;]?.Value&lt;int&gt;() ?? 0)" />
         <set-variable name="completionTokens" value="@(((JObject)context.Variables[&quot;responseBody&quot;])[&quot;usage&quot;]?[&quot;completion_tokens&quot;]?.Value&lt;int&gt;() ?? 0)" />
+        <set-variable name="extractedContent" value="@(((JObject)context.Variables[&quot;responseBody&quot;])[&quot;choices&quot;]?[0]?[&quot;message&quot;]?[&quot;content&quot;]?.ToString() ?? &quot;{}&quot;)" />
+
         <!-- Calculate estimated cost (GPT-4o pricing: $2.50/1M input, $10.00/1M output tokens) -->
         <set-variable name="estimatedCost" value="@{
             int promptTokens = (int)context.Variables[&quot;promptTokens&quot;];
@@ -38,6 +78,30 @@
             double outputCost = (completionTokens / 1000000.0) * 10.00;
             return inputCost + outputCost;
         }" />
+
+        <!-- Transform OpenAI response to simplified format -->
+        <set-body>@{
+            var extractedContent = (string)context.Variables["extractedContent"];
+            var tokenUsage = (int)context.Variables["tokenUsage"];
+            var requestId = (string)context.Variables["requestId"];
+
+            // Parse the extracted JSON content
+            JObject extractedData;
+            try {
+                extractedData = JObject.Parse(extractedContent);
+            } catch {
+                extractedData = new JObject();
+            }
+
+            return new JObject(
+                new JProperty("extracted_data", extractedData),
+                new JProperty("confidence", 0.95),
+                new JProperty("tokens_used", tokenUsage),
+                new JProperty("request_id", requestId),
+                new JProperty("model", "gpt-4o")
+            ).ToString();
+        }</set-body>
+
         <!-- Log detailed operation completion -->
         <trace source="AI-Gateway-Extract" severity="information">@{
                 return JsonConvert.SerializeObject(new {
